@@ -414,10 +414,10 @@
 
 # if __name__ == "__main__":
 #     asyncio.run(main())
+import os
 import asyncio
 import logging
 import sys
-import os
 import re
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -426,6 +426,8 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 from dotenv import load_dotenv
 
 from bot.utils.yandex_disk_client import smart_document_search, build_docs_url
@@ -438,13 +440,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 YANDEX_DISK_FOLDER_PATH = os.getenv("YANDEX_DISK_FOLDER_PATH", "/")
 YANDEX_DISK_PUBLIC_KEY = os.getenv("YANDEX_DISK_PUBLIC_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "")  # URL от Render
+PORT = int(os.getenv("PORT", 3000))
 
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN не найден в .env")
-if not YANDEX_DISK_PUBLIC_KEY:
-    raise ValueError("❌ YANDEX_DISK_PUBLIC_KEY не найден в .env")
-if not OPENROUTER_API_KEY:
-    raise ValueError("❌ OPENROUTER_API_KEY не найден в .env")
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -456,12 +456,6 @@ GREETINGS = {
 }
 
 SIMPLE_QUERIES = {"урри", "urri", "hdl", "баспро", "buspro", "матек", "matech", "йилайт", "yeelight"}
-
-# Запросы, которые сразу идут к ИИ (не ищем документацию)
-AI_DIRECT_QUERIES = [
-    "алис", "голосов", "яндекс алис", "yandex alice", "alisa",
-    "интеграци", "подключи", "настрои", "связать", "объединить"
-]
 
 class SupportForm(StatesGroup):
     name = State()
@@ -551,12 +545,6 @@ def should_use_ai_directly(query: str) -> bool:
     has_alisa = any(keyword in query_lower for keyword in alisa_keywords)
     has_integration = any(keyword in query_lower for keyword in integration_keywords)
     has_knx = "knx" in query_lower or "кникс" in query_lower or "кнх" in query_lower
-    
-    # Отладочная информация
-    print(f"🔍 Анализ запроса: '{query}'")
-    print(f"   Есть Алиса: {has_alisa}")
-    print(f"   Есть интеграция: {has_integration}") 
-    print(f"   Есть KNX: {has_knx}")
     
     # КРИТИЧЕСКИ ВАЖНО: Если есть Алиса И (интеграция ИЛИ KNX) - сразу к ИИ
     if has_alisa and (has_integration or has_knx):
@@ -797,8 +785,49 @@ async def handle_ask_ai_callback(callback: CallbackQuery, state: FSMContext):
         ])
     )
 
-async def main() -> None:
-    await dp.start_polling(bot)
+async def on_startup(bot: Bot, base_url: str):
+    """Установка вебхука при старте"""
+    if base_url:
+        webhook_url = f"{base_url}/webhook"
+        await bot.set_webhook(webhook_url)
+        logging.info(f"Webhook установлен: {webhook_url}")
+
+async def on_shutdown(bot: Bot):
+    """Удаление вебхука при остановке"""
+    await bot.delete_webhook()
+    logging.info("Webhook удален")
+
+def main():
+    """Запуск приложения"""
+    if RENDER_EXTERNAL_URL:
+        # Режим вебхука для продакшена
+        app = web.Application()
+        
+        # Регистрируем обработчик вебхука
+        webhook_requests_handler = SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot,
+        )
+        webhook_requests_handler.register(app, path="/webhook")
+        
+        # Настраиваем приложение
+        setup_application(app, dp, bot=bot)
+        
+        # Запускаем на старте установку вебхука
+        async def on_startup_app(app):
+            await on_startup(bot, RENDER_EXTERNAL_URL)
+        
+        app.on_startup.append(on_startup_app)
+        app.on_shutdown.append(on_shutdown)
+        
+        # Запускаем сервер
+        web.run_app(app, host="0.0.0.0", port=PORT)
+    else:
+        # Режим polling для разработки
+        async def run_polling():
+            await dp.start_polling(bot)
+        
+        asyncio.run(run_polling())
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
