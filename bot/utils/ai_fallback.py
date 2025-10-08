@@ -263,7 +263,7 @@
 
 # bot/utils/ai_fallback.py
 import os
-import httpx
+import aiohttp
 import json
 import logging
 from dotenv import load_dotenv
@@ -271,49 +271,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-if not OPENROUTER_API_KEY:
-    raise ValueError("❌ OPENROUTER_API_KEY не найден в .env")
-
 logger = logging.getLogger(__name__)
-
-# Счетчики для отслеживания использования
-request_count = 0
-token_count = 0
-
-def log_rate_limits(response):
-    """Логирует информацию о лимитах"""
-    global request_count, token_count
-    
-    headers = response.headers
-    limit = headers.get("X-RateLimit-Limit")
-    remaining = headers.get("X-RateLimit-Remaining")
-    reset = headers.get("X-RateLimit-Reset")
-    
-    # Лимиты по токенам
-    token_limit = headers.get("X-RateLimit-Limit-Tokens")
-    token_remaining = headers.get("X-RateLimit-Remaining-Tokens")
-    
-    request_count += 1
-    
-    logger.info("📊 OpenRouter Limits:")
-    
-    if limit and remaining:
-        logger.info(f"   Запросы: {remaining}/{limit} (сброс через {reset}s)")
-    
-    if token_limit and token_remaining:
-        # Преобразуем в тысячи для удобства чтения
-        token_remaining_k = int(token_remaining) // 1000 if token_remaining else 0
-        token_limit_k = int(token_limit) // 1000 if token_limit else 0
-        logger.info(f"   Токены: ~{token_remaining_k}K/{token_limit_k}K")
-    
-    # Ваша статистика
-    logger.info(f"   Ваша статистика: {request_count} запросов сегодня")
 
 async def ask_ai(user_query: str, context: str = "") -> str:
     """
-    Оптимизированная функция запросов к ИИ
+    Функция запросов к ИИ через OpenRouter
     """
-    # Проверяем длину запроса чтобы не тратить лишние токены
+    if not OPENROUTER_API_KEY:
+        return "ИИ временно недоступен. API ключ не настроен."
+    
+    # Проверяем длину запроса
     if len(user_query) > 500:
         user_query = user_query[:500] + "..."
     
@@ -325,75 +292,61 @@ async def ask_ai(user_query: str, context: str = "") -> str:
         system_prompt += f" Бренды: {context}"
 
     try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            response = await client.post(
-                url="https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://t.me/HDL_Assistant_Bot",
-                    "X-Title": "HDL Assistant Bot"
-                },
-                json={
-                    "model": "deepseek/deepseek-chat-v3.1:free",  # Стабильная бесплатная модель
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_query}
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 350,  # Уменьшил с 400 для экономии
-                    "top_p": 0.9
-                }
-            )
-
-            # Логируем лимиты
-            log_rate_limits(response)
-
-            if response.status_code == 429:
-                remaining = response.headers.get("X-RateLimit-Remaining")
-                reset = response.headers.get("X-RateLimit-Reset")
-                
-                if remaining == "0":
-                    logger.warning("⏰ Лимиты исчерпаны! Ждем сброса...")
-                    if reset:
-                        minutes = int(reset) // 60
-                        return (
-                            f"⚠️ Бесплатные лимиты ИИ исчерпаны.\n\n"
-                            f"Лимиты обновятся через ~{minutes} минут.\n\n"
-                            f"А пока я могу:\n"
-                            f"• 🔍 Найти документацию\n"
-                            f"• 📚 Показать базу знаний\n"
-                            f"• 📞 Связать со специалистом"
-                        )
-                
-                return "ИИ временно недоступен. Попробуйте через несколько минут."
-                
-            elif response.status_code != 200:
-                logger.error(f"Ошибка {response.status_code}: {response.text}")
-                return get_fallback_response()
-
-            data = response.json()
-            
-            # Логируем использование токенов
-            usage = data.get('usage', {})
-            if usage:
-                total_tokens = usage.get('total_tokens', 0)
-                logger.info(f"📝 Использовано токенов: {total_tokens}")
-            
-            answer = data["choices"][0]["message"]["content"].strip()
-            
-            # Проверяем качество ответа
-            if len(answer) < 10 or "как ии" in answer.lower():
-                return get_fallback_response()
-                
-            return answer
-
-    except httpx.TimeoutException:
-        logger.error("Таймаут запроса к ИИ")
-        return "ИИ временно недоступен. Попробуйте позже."
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://t.me/HDL_Assistant_Bot",
+            "X-Title": "HDL Assistant Bot"
+        }
         
+        data = {
+            "model": "google/gemma-2-9b-it:free",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_query}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 350,
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=30
+            ) as response:
+                
+                logger.info(f"📡 Статус ответа: {response.status}")
+                
+                if response.status == 200:
+                    result = await response.json()
+                    answer = result['choices'][0]['message']['content'].strip()
+                    logger.info("✅ ИИ ответил успешно")
+                    return answer
+                    
+                elif response.status == 404:
+                    error_text = await response.text()
+                    logger.error(f"❌ Ошибка 404: {error_text}")
+                    return (
+                        "🤖 ИИ временно недоступен.\n\n"
+                        "Для активации ИИ необходимо настроить политику приватности OpenRouter.\n\n"
+                        "А пока я могу:\n"
+                        "• 🔍 Найти документацию по вашему запросу\n"
+                        "• 📚 Показать базу технической документации\n"
+                        "• 📞 Связать с техническим специалистом"
+                    )
+                    
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ Ошибка {response.status}: {error_text}")
+                    return get_fallback_response()
+
+    except aiohttp.ClientError as e:
+        logger.error(f"❌ Ошибка подключения: {e}")
+        return "ИИ временно недоступен. Проблемы с подключением."
     except Exception as e:
-        logger.exception(f"Ошибка: {e}")
+        logger.error(f"❌ Неожиданная ошибка: {e}")
         return get_fallback_response()
 
 def get_fallback_response() -> str:
@@ -407,27 +360,22 @@ def get_fallback_response() -> str:
         "Попробуйте уточнить запрос или используйте кнопки ниже."
     )
 
-# Упрощенная версия анализа релевантности для экономии токенов
 async def analyze_relevance(user_query: str, filename: str) -> bool:
     """
-    Упрощенный анализ релевантности без запросов к ИИ
+    Упрощенный анализ релевантности
     """
     query_lower = user_query.lower()
     filename_lower = filename.lower()
     
-    # Для простых запросов по брендам - все файлы релевантны
     simple_brands = ["урри", "urri", "hdl", "баспро", "buspro", "матек", "matech"]
     if any(brand in query_lower for brand in simple_brands):
         return True
     
-    # Для сложных запросов про интеграцию Алисы - фильтруем
     if "алис" in query_lower and "knx" in query_lower:
-        # Исключаем технические паспорта
         exclude_patterns = ["r5-", "датчик", "sensor", "техническ", "паспорт"]
         if any(pattern in filename_lower for pattern in exclude_patterns):
             return False
         
-        # Включаем файлы про интеграцию
         include_patterns = ["интеграци", "integration", "подключени", "connect", "руководств"]
         if any(pattern in filename_lower for pattern in include_patterns):
             return True
