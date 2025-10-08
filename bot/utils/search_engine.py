@@ -390,6 +390,68 @@ class SearchEngine:
         
         return scored_results[:limit]
 
+    def should_use_ai_for_results(self, query: str, results: List[Dict[str, Any]]) -> bool:
+        """
+        Определяет, нужно ли подключать ИИ когда найдены 'ложные' результаты
+        """
+        if not results:
+            return True
+        
+        query_lower = query.lower()
+        
+        # Список конкретных продуктов HDL, которых нет в документации
+        specific_products_no_docs = [
+            "iridi", "iris", "сириус", "орион", "ариэль", 
+            "тритон", "нептун", "юпитер", "венера", "марс"
+        ]
+        
+        # Проверяем есть ли конкретный продукт в запросе
+        has_specific_product = any(product in query_lower for product in specific_products_no_docs)
+        
+        if has_specific_product:
+            # Проверяем качество найденных результатов
+            good_matches = 0
+            for result in results:
+                file_name = result.get("name", "").lower()
+                file_path = result.get("path", "").lower()
+                
+                # Считаем только хорошие совпадения (продукт в названии или пути)
+                if (any(product in file_name for product in specific_products_no_docs) or
+                    any(product in file_path for product in specific_products_no_docs)):
+                    good_matches += 1
+                    logging.info(f"✅ Найден хороший матч: {file_name}")
+            
+            # Если нет хороших совпадений - к ИИ
+            if good_matches == 0:
+                logging.info(f"🎯 Конкретный продукт '{query}' не найден в документации → ИИ")
+                return True
+        
+        # Проверяем релевантность результатов
+        total_relevance = sum(result.get("relevance", 0) for result in results)
+        avg_relevance = total_relevance / len(results) if results else 0
+        
+        # Если средняя релевантность низкая - к ИИ
+        if avg_relevance < 3.0:
+            logging.info(f"🎯 Низкая релевантность {avg_relevance:.2f} для '{query}' → ИИ")
+            return True
+        
+        # Проверяем есть ли дубликаты файлов
+        unique_files = set()
+        duplicate_count = 0
+        for result in results:
+            file_name = result.get("name", "")
+            if file_name in unique_files:
+                duplicate_count += 1
+            else:
+                unique_files.add(file_name)
+        
+        # Если много дубликатов - вероятно плохие результаты
+        if duplicate_count >= len(results) * 0.5:  # 50% дубликатов
+            logging.info(f"🎯 Много дубликатов ({duplicate_count}) для '{query}' → ИИ")
+            return True
+        
+        return False
+
     def hybrid_search(self, query: str, limit: int = 3) -> List[Dict[str, Any]]:
         """
         Гибридный поиск: сначала проверяем специальные правила,
@@ -425,14 +487,26 @@ class SearchEngine:
 
         # 4. УЛУЧШЕННЫЙ ПОИСК
         improved_results = self.search(query, limit)
+        
+        # 5. ПРОВЕРКА КАЧЕСТВА РЕЗУЛЬТАТОВ
+        if improved_results and self.should_use_ai_for_results(query, improved_results):
+            logging.info(f"🎯 НИЗКОЕ КАЧЕСТВО РЕЗУЛЬТАТОВ для '{query}' → ИИ")
+            return []  # Пустой результат заставит main.py подключить ИИ
+        
         if improved_results:
             logging.info(f"✅ Улучшенный поиск нашел {len(improved_results)} результатов")
             return improved_results
         
-        # 5. СТАРЫЙ ПОИСК ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
+        # 6. СТАРЫЙ ПОИСК ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
         logging.info("🔄 Используем старый поисковый алгоритм")
         try:
             old_results = self.old_smart_search(query)
+            
+            # Проверяем качество старых результатов тоже
+            if old_results and self.should_use_ai_for_results(query, old_results):
+                logging.info(f"🎯 НИЗКОЕ КАЧЕСТВО СТАРЫХ РЕЗУЛЬТАТОВ для '{query}' → ИИ")
+                return []
+                
             return old_results[:limit]
         except Exception as e:
             logging.error(f"❌ Ошибка в старом поиске: {e}")
@@ -553,22 +627,41 @@ def search_in_file_index(query: str, index_path: str = "data/cache/file_index.js
 
 def has_only_technical_files(results: List[Dict[str, Any]]) -> bool:
     """
-    Проверяет, содержат ли результаты только технические файлы
+    Проверяет, содержат ли результаты только технические файлы низкого качества
     """
     # Если это ссылка на папку - не считаем техническим
     if results and results[0].get("is_folder_link"):
         return False
-        
-    technical_patterns = ["r5-", "датчик", "sensor", "техническ", "паспорт", "technical"]
+    
+    technical_patterns = [
+        "r5-", "датчик", "sensor", "техническ", "паспорт", "technical",
+        "installation", "guide", "manual", "reference", "form", "panel"
+    ]
+    
+    low_quality_indicators = 0
+    total_files = len(results)
     
     for file_data in results:
         file_name = file_data.get("name", "").lower()
+        
         # Если есть хоть один НЕ технический файл - возвращаем False
-        if not any(pattern in file_name for pattern in technical_patterns):
+        is_technical = any(pattern in file_name for pattern in technical_patterns)
+        if not is_technical:
             return False
+        
+        # Считаем индикаторы низкого качества
+        if "form" in file_name:
+            low_quality_indicators += 1
+        if "installation" in file_name and "guide" in file_name:
+            low_quality_indicators += 1
+        if file_data.get("relevance", 0) < 3.0:
+            low_quality_indicators += 1
     
-    # Все файлы технические
-    return True
+    # Если большинство файлов низкого качества
+    if low_quality_indicators >= total_files * 0.7:  # 70% низкого качества
+        return True
+    
+    return False
 
 def should_use_ai_directly(query: str) -> bool:
     """
