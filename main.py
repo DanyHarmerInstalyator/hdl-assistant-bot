@@ -671,26 +671,38 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
     if results:
         response = f"✅ Найдено документов: {len(results)}\n\n"
         
+        # Создаем кнопки для документов
+        keyboard_buttons = []
+        
         for i, file_data in enumerate(results[:3], 1):
             try:
                 direct_link = build_docs_url(file_data["path"])
                 response += f"{i}. <b>{file_data['name']}</b>\n"
-                response += f"🔗 {direct_link}\n\n"
+                
+                # Добавляем кнопку для каждого документа
+                keyboard_buttons.append(
+                    [InlineKeyboardButton(
+                        text=f"📄 Открыть документ {i}", 
+                        url=direct_link
+                    )]
+                )
+                
             except Exception as e:
                 logging.error(f"Ошибка генерации ссылки: {e}")
                 response += f"{i}. <b>{file_data['name']}</b>\n"
                 response += f"📁 Файл в базе документации\n\n"
-                
-        response += "Полученная информация вам помогла?"
         
+        response += "\nНажмите на кнопку ниже чтобы открыть документ:"
+        
+        # Добавляем кнопки "Да/Нет" под кнопками документов
+        keyboard_buttons.append([
+            InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
+            InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
+        ])
+                
         await message.answer(
             response,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
-                    InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
-                ]
-            ])
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
         )
         
         # Если нашли только технические паспорта для сложного запроса
