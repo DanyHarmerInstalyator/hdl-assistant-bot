@@ -2,20 +2,99 @@ import os
 import json
 import logging
 import re
+import requests
+import urllib.parse
 from typing import List, Dict, Any, Tuple
 from difflib import SequenceMatcher
+from dotenv import load_dotenv
 
-# Импортируем ваши существующие функции
-from .yandex_disk_client import (
-    normalize_with_synonyms, 
-    smart_document_search as yandex_smart_search,
-    build_docs_url
-)
+load_dotenv()
+
+# Конфигурация Яндекс.Диска
+YANDEX_DISK_TOKEN = os.getenv("YANDEX_DISK_TOKEN")
+YANDEX_DISK_FOLDER_PATH = os.getenv("YANDEX_DISK_FOLDER_PATH", "/")
+DOCS_PUBLIC_KEY = os.getenv("DOCS_PUBLIC_KEY")
+
+if not YANDEX_DISK_TOKEN:
+    raise ValueError("❌ YANDEX_DISK_TOKEN не найден в .env")
+if not DOCS_PUBLIC_KEY:
+    raise ValueError("❌ DOCS_PUBLIC_KEY не найден в .env")
+
+BASE_URL = "https://cloud-api.yandex.net/v1/disk"
+HEADERS = {
+    "Authorization": f"OAuth {YANDEX_DISK_TOKEN}"
+}
+
+# Синонимы для поиска
+SYNONYMS = {
+    "кабель": "cable",
+    "кникс": "knx", 
+    "кнх": "knx",
+    "датчик": "sensor",
+    "реле": "relay",
+    "контроллер": "controller",
+    "панель": "panel",
+    "инструкция": "manual",
+    "паспорт": "datasheet",
+    "урри": "urri",
+    "юрии": "urri",
+    "хдл": "hdl",
+    "баспро": "buspro",
+    "баспр": "buspro",
+    "матек": "matech",
+    "матеч": "matech",
+    "йилайт": "yeelight",
+    "изикул": "easycool",
+    "кабел": "cable",
+    "замок": "lock",
+    "дверной": "door",
+    "иот": "iot",
+    "айоти": "iot",
+    "техничка": "technical"
+}
+
+def normalize_with_synonyms(query: str) -> str:
+    """Нормализация текста с синонимами"""
+    query_lower = query.lower().strip()
+    for wrong, correct in sorted(SYNONYMS.items(), key=lambda x: -len(x[0])):
+        query_lower = query_lower.replace(wrong, correct)
+    cleaned = re.sub(r"[^a-z0-9\s]", " ", query_lower)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+def get_folder_contents(path: str) -> List[Dict]:
+    """Получение содержимого папки Яндекс.Диска"""
+    url = f"{BASE_URL}/resources"
+    params = {"path": path, "limit": 1000}
+    response = requests.get(url, headers=HEADERS, params=params)
+    response.raise_for_status()
+    data = response.json()
+    return data.get("_embedded", {}).get("items", [])
+
+def build_docs_url(file_path: str) -> str:
+    """Построение URL для просмотра документа"""
+    base = YANDEX_DISK_FOLDER_PATH.rstrip("/")
+    if file_path.startswith(base):
+        relative_path = file_path[len(base):].lstrip("/")
+    else:
+        relative_path = file_path.lstrip("/")
+    
+    encoded_docs_key = urllib.parse.quote(DOCS_PUBLIC_KEY, safe="")
+    encoded_path = urllib.parse.quote(relative_path, safe="/")
+    filename = os.path.basename(file_path)
+    encoded_name = urllib.parse.quote(filename, safe="")
+    
+    return (
+        f"https://docs.360.yandex.ru/docs/view?"
+        f"url=ya-disk-public%3A%2F%2F{encoded_docs_key}%3A%2F{encoded_path}"
+        f"&name={encoded_name}&nosw=1"
+    )
 
 class SearchEngine:
     def __init__(self, index_file: str = "data/cache/file_index.json"):
         self.index_file = index_file
         self.file_index = self.load_index()
+        
+        # Синонимы для расширения запросов
         self.synonyms = {
             "кабель": ["cable", "провод", "wire", "кабел"],
             "knx": ["кникс", "кнх", "knx"],
@@ -56,7 +135,12 @@ class SearchEngine:
             "замки iot": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/04.%20%D0%94%D0%B2%D0%B5%D1%80%D0%BD%D1%8B%D0%B5%20%D0%B7%D0%B0%D0%BC%D0%BA%D0%B8%20iOT%20Systems",
             "замки иот": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/04.%20%D0%94%D0%B2%D0%B5%D1%80%D0%BD%D1%8B%D0%B5%20%D0%B7%D0%B0%D0%BC%D0%BA%D0%B8%20iOT%20Systems",
             "iot замок": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/04.%20%D0%94%D0%B2%D0%B5%D1%80%D0%BD%D1%8B%D0%B5%20%D0%B7%D0%B0%D0%BC%D0%BA%D0%B8%20iOT%20Systems",
-            "door lock": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/04.%20%D0%94%D0%B2%D0%B5%D1%80%D0%BD%D1%8B%D0%B5%20%D0%B7%D0%B0%D0%BC%D0%BA%D0%B8%20iOT%20Systems"
+            "door lock": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/04.%20%D0%94%D0%B2%D0%B5%D1%80%D0%BD%D1%8B%D0%B5%20%D0%B7%D0%B0%D0%BC%D0%BA%D0%B8%20iOT%20Systems",
+            
+            "алиса": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/02.%20HDL/09.%20%D0%98%D0%BD%D1%82%D0%B5%D0%B3%D1%80%D0%B0%D1%86%D0%B8%D1%8F%20%D1%81%20%D0%B3%D0%BE%D0%BB%D0%BE%D1%81%D0%BE%D0%B2%D1%8B%D0%BC%D0%B8%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D0%B0%D0%BC%D0%B8.%20Buspro%20%D0%B8%20KNX",
+            "яндекс алиса": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/02.%20HDL/09.%20%D0%98%D0%BD%D1%82%D0%B5%D0%B3%D1%80%D0%B0%D1%86%D0%B8%D1%8F%20%D1%81%20%D0%B3%D0%BE%D0%BB%D0%BE%D1%81%D0%BE%D0%B2%D1%8B%D0%BC%D0%B8%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D0%B0%D0%BC%D0%B8.%20Buspro%20%D0%B8%20KNX",
+            "голосовой ассистент": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/02.%20HDL/09.%20%D0%98%D0%BD%D1%82%D0%B5%D0%B3%D1%80%D0%B0%D1%86%D0%B8%D1%8F%20%D1%81%20%D0%B3%D0%BE%D0%BB%D0%BE%D1%81%D0%BE%D0%B2%D1%8B%D0%BC%D0%B8%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D0%B0%D0%BC%D0%B8.%20Buspro%20%D0%B8%20KNX",
+            "mgwip": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/02.%20HDL/09.%20%D0%98%D0%BD%D1%82%D0%B5%D0%B3%D1%80%D0%B0%D1%86%D0%B8%D1%8F%20%D1%81%20%D0%B3%D0%BE%D0%BB%D0%BE%D1%81%D0%BE%D0%B2%D1%8B%D0%BC%D0%B8%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D0%B0%D0%BC%D0%B8.%20Buspro%20%D0%B8%20KNX",
         }
 
     def load_index(self) -> List[Dict[str, Any]]:
@@ -80,7 +164,6 @@ class SearchEngine:
         """Нормализация текста для поиска"""
         if not text:
             return ""
-        # Используем вашу существующую функцию нормализации
         return normalize_with_synonyms(text)
 
     def expand_synonyms(self, query: str) -> List[str]:
@@ -143,6 +226,30 @@ class SearchEngine:
         has_cable = any(word in ["кабель", "cable", "кабел"] for word in words)
         
         return has_knx and has_cable
+
+    def is_alisa_integration_query(self, query: str) -> bool:
+        """Определяет, является ли запрос про интеграцию с Яндекс Алисой"""
+        query_lower = query.lower()
+        
+        alisa_keywords = [
+            "алиса", "яндекс алис", "yandex alice", "alisa", 
+            "яндексалис", "голосов", "голосовой", "ассистент",
+            "mgwip", "шлюз", "интеграци"
+        ]
+        
+        integration_keywords = [
+            "интеграци", "настрои", "подключи", "связк", 
+            "связать", "объединить", "инструкц", "руководств"
+        ]
+        
+        has_alisa = any(keyword in query_lower for keyword in alisa_keywords)
+        has_integration = any(keyword in query_lower for keyword in integration_keywords)
+        
+        return has_alisa and has_integration
+
+    def get_alisa_integration_link(self) -> str:
+        """Ссылка на документацию по интеграции с голосовыми ассистентами"""
+        return "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/02.%20HDL/09.%20%D0%98%D0%BD%D1%82%D0%B5%D0%B3%D1%80%D0%B0%D1%86%D0%B8%D1%8F%20%D1%81%20%D0%B3%D0%BE%D0%BB%D0%BE%D1%81%D0%BE%D0%B2%D1%8B%D0%BC%D0%B8%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D0%B0%D0%BC%D0%B8.%20Buspro%20%D0%B8%20KNX"
 
     def find_knx_cable_files(self) -> List[Dict[str, Any]]:
         """Принудительно ищет файлы кабеля KNX"""
@@ -288,18 +395,27 @@ class SearchEngine:
         Гибридный поиск: сначала проверяем специальные правила,
         затем обычный поиск
         """
-        # 1. СПЕЦИАЛЬНОЕ ПРАВИЛО ДЛЯ КАБЕЛЯ KNX - САМЫЙ ВЫСШИЙ ПРИОРИТЕТ
+        # 1. СПЕЦИАЛЬНОЕ ПРАВИЛО ДЛЯ ИНТЕГРАЦИИ С АЛИСОЙ - ВЫСШИЙ ПРИОРИТЕТ
+        if self.is_alisa_integration_query(query):
+            logging.info(f"🎯 ИНТЕГРАЦИЯ АЛИСА: запрос '{query}' → ссылка на документацию")
+            return [{
+                "name": f"📁 Документация по интеграции с Яндекс Алисой",
+                "path": self.get_alisa_integration_link(),
+                "is_folder_link": True,
+                "folder_link": self.get_alisa_integration_link()
+            }]
+
+        # 2. СПЕЦИАЛЬНОЕ ПРАВИЛО ДЛЯ КАБЕЛЯ KNX
         if self.is_knx_cable_query(query):
             knx_cable_results = self.find_knx_cable_files()
             if knx_cable_results:
                 logging.info(f"🎯 КАБЕЛЬ KNX: найдено {len(knx_cable_results)} файлов")
                 return knx_cable_results[:limit]
 
-        # 2. ПРОВЕРКА ПЕРЕНАПРАВЛЕНИЯ НА ПАПКИ ЯНДЕКС.ДИСКА
+        # 3. ПРОВЕРКА ПЕРЕНАПРАВЛЕНИЯ НА ПАПКИ ЯНДЕКС.ДИСКА
         should_redirect, folder_link = self.should_redirect_to_folder(query)
         if should_redirect:
             logging.info(f"🎯 ПЕРЕНАПРАВЛЕНИЕ: запрос '{query}' → папка Яндекс.Диска")
-            # Возвращаем специальный результат с ссылкой на папку
             return [{
                 "name": f"📁 Папка с документацией: {query}",
                 "path": folder_link,
@@ -307,20 +423,121 @@ class SearchEngine:
                 "folder_link": folder_link
             }]
 
-        # 3. УЛУЧШЕННЫЙ ПОИСК
+        # 4. УЛУЧШЕННЫЙ ПОИСК
         improved_results = self.search(query, limit)
         if improved_results:
             logging.info(f"✅ Улучшенный поиск нашел {len(improved_results)} результатов")
             return improved_results
         
-        # 4. СТАРЫЙ ПОИСК ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
+        # 5. СТАРЫЙ ПОИСК ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
         logging.info("🔄 Используем старый поисковый алгоритм")
         try:
-            old_results = yandex_smart_search(query)
+            old_results = self.old_smart_search(query)
             return old_results[:limit]
         except Exception as e:
             logging.error(f"❌ Ошибка в старом поиске: {e}")
             return []
+
+    def old_smart_search(self, query: str, limit: int = 3) -> List[Dict]:
+        """
+        Старый алгоритм поиска (из yandex_disk_client.py)
+        для обратной совместимости
+        """
+        if not self.file_index:
+            return []
+
+        query_norm = self.normalize_text(query)
+        print(f"🔍 Старый поиск: '{query}' -> Нормализованный: '{query_norm}'")
+        
+        if not query_norm:
+            return []
+
+        # Уровень 1: Точный поиск по всем ключевым словам
+        exact_results = self.old_search_exact_match(query_norm, self.file_index)
+        if exact_results:
+            print(f"✅ Уровень 1: Найдено {len(exact_results)} точных совпадений")
+            return exact_results[:limit]
+
+        # Уровень 2: Поиск по комбинациям ключевых слов
+        combo_results = self.old_search_keyword_combinations(query_norm, self.file_index)
+        if combo_results:
+            print(f"✅ Уровень 2: Найдено {len(combo_results)} комбинаций")
+            return combo_results[:limit]
+
+        # Уровень 3: Поиск по отдельным важным ключевым словам
+        important_results = self.old_search_important_keywords(query_norm, self.file_index)
+        if important_results:
+            print(f"✅ Уровень 3: Найдено {len(important_results)} по важным словам")
+            return important_results[:limit]
+
+        return []
+
+    def old_search_exact_match(self, query_norm: str, files: List[Dict]) -> List[Dict]:
+        """Старый точный поиск"""
+        keywords = [word for word in query_norm.split() if len(word) >= 2]
+        if not keywords:
+            return []
+
+        results = []
+        for file_data in files:
+            norm_name = file_data.get("norm_name", "")
+            if all(kw in norm_name for kw in keywords):
+                results.append(file_data)
+        
+        return results
+
+    def old_search_keyword_combinations(self, query_norm: str, files: List[Dict]) -> List[Dict]:
+        """Старый поиск по комбинациям"""
+        keywords = [word for word in query_norm.split() if len(word) >= 2]
+        if len(keywords) < 2:
+            return []
+
+        scored_files = []
+        
+        for file_data in files:
+            norm_name = file_data.get("norm_name", "")
+            file_name = file_data.get("name", "").lower()
+            
+            score = 0
+            
+            # Количество совпавших ключевых слов
+            matched_keywords = sum(1 for kw in keywords if kw in norm_name)
+            if matched_keywords >= 2:  # Хотя бы 2 ключевых слова
+                score += matched_keywords * 20
+            
+            # Бонус за совпадение в оригинальном имени
+            matched_in_original = sum(1 for kw in keywords if kw in file_name)
+            score += matched_in_original * 10
+            
+            if score > 0:
+                scored_files.append((score, file_data))
+        
+        scored_files.sort(key=lambda x: x[0], reverse=True)
+        return [file_data for score, file_data in scored_files]
+
+    def old_search_important_keywords(self, query_norm: str, files: List[Dict]) -> List[Dict]:
+        """Старый поиск по важным ключевым словам"""
+        important_keywords = ["alisa", "knx", "integration", "connect", "gateway", "voice"]
+        
+        # Находим важные ключевые слова в запросе
+        found_important = [kw for kw in important_keywords if kw in query_norm]
+        if not found_important:
+            return []
+
+        scored_files = []
+        for file_data in files:
+            norm_name = file_data.get("norm_name", "")
+            
+            score = 0
+            for keyword in found_important:
+                if keyword in norm_name:
+                    score += 30
+            
+            if score > 0:
+                scored_files.append((score, file_data))
+        
+        scored_files.sort(key=lambda x: x[0], reverse=True)
+        return [file_data for score, file_data in scored_files]
 
 
 # Функции для обратной совместимости
@@ -359,37 +576,34 @@ def should_use_ai_directly(query: str) -> bool:
     """
     query_lower = query.lower()
     
-    # Более широкий список ключевых слов для Алисы
+    # ВАЖНОЕ ИЗМЕНЕНИЕ: ВСЕ запросы про Алису идут в обычный поиск для получения ссылки
     alisa_keywords = [
-        "алис", "голосов", "яндекс алис", "yandex alice", "alisa", 
-        "алису", "алисой", "алисы", "голосовой", "голосовое"
+        "алис", "яндекс алис", "yandex alice", "alisa", "mgwip", 
+        "голосов", "голосовой", "ассистент", "шлюз", "интеграци"
     ]
     
-    # Более широкий список ключевых слов для интеграции
+    if any(keyword in query_lower for keyword in alisa_keywords):
+        print("❌ Решение: запрос про Алису → обычный поиск (для ссылки на документацию)")
+        return False
+    
+    # Остальная логика для других типов запросов
     integration_keywords = [
-        "интеграци", "подключи", "настрои", "связать", "объединить", 
-        "через", "с помощью", "вместе", "совместн", "как сделав", 
-        "как настроив", "как подключив"
+        "интеграци", "подключи", "настрои", "связать", "объединить"
     ]
     
-    has_alisa = any(keyword in query_lower for keyword in alisa_keywords)
-    has_integration = any(keyword in query_lower for keyword in integration_keywords)
     has_knx = "knx" in query_lower or "кникс" in query_lower or "кнх" in query_lower
     
-    # КРИТИЧЕСКИ ВАЖНО: Если есть Алиса И (интеграция ИЛИ KNX) - сразу к ИИ
-    if has_alisa and (has_integration or has_knx):
-        print("✅ Решение: Алиса + интеграция/KNX → сразу к ИИ")
-        return True
+    # Сложные вопросы (когда нужен ИИ):
+    complex_question_words = [
+        "почему", "какой лучше", "что выбрать", "сравни", "отличия", 
+        "проблема", "ошибка", "не работает", "не подключается", "сломал"
+    ]
     
-    # Сложные вопросы про Алису
-    question_words = ["как", "что", "какой", "какая", "можно ли", "возможно ли", "каков", "подскажи", "посоветуй"]
-    if any(word in query_lower for word in question_words) and has_alisa:
-        print("✅ Решение: вопрос про Алису → к ИИ")
-        return True
+    is_complex_question = any(word in query_lower for word in complex_question_words)
     
-    # Любой запрос содержащий "Алиса" и "KNX" вместе
-    if has_alisa and has_knx:
-        print("✅ Решение: Алиса + KNX → сразу к ИИ")
+    # Технические проблемы с другим оборудованием (кроме Алисы)
+    if is_complex_question and not any(alisa_keyword in query_lower for alisa_keyword in alisa_keywords):
+        print("✅ Решение: техническая проблема → к ИИ")
         return True
     
     print("❌ Решение: обычный поиск документации")

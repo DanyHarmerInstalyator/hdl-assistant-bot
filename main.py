@@ -432,7 +432,8 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from aiohttp import web
 from dotenv import load_dotenv
 
-from bot.utils.yandex_disk_client import smart_document_search, build_docs_url
+# Обновленные импорты после объединения файлов
+from bot.utils.search_engine import smart_document_search, build_docs_url, should_use_ai_directly, has_only_technical_files
 from bot.utils.ai_fallback import ask_ai
 from keyboards import main_reply_keyboard, docs_inline_keyboard
 
@@ -525,67 +526,6 @@ async def process_phone(message: Message, state: FSMContext):
         await message.answer("Не удалось отправить заявку. Напишите напрямую: https://t.me/hdl_support")
     await state.clear()
 
-def should_use_ai_directly(query: str) -> bool:
-    """
-    Определяет, нужно ли сразу подключать ИИ без поиска документации
-    """
-    query_lower = query.lower()
-    
-    # Более широкий список ключевых слов для Алисы
-    alisa_keywords = [
-        "алис", "голосов", "яндекс алис", "yandex alice", "alisa", 
-        "алису", "алисой", "алисы", "голосовой", "голосовое"
-    ]
-    
-    # Более широкий список ключевых слов для интеграции
-    integration_keywords = [
-        "интеграци", "подключи", "настрои", "связать", "объединить", 
-        "через", "с помощью", "вместе", "совместн", "как сделав", 
-        "как настроив", "как подключив"
-    ]
-    
-    has_alisa = any(keyword in query_lower for keyword in alisa_keywords)
-    has_integration = any(keyword in query_lower for keyword in integration_keywords)
-    has_knx = "knx" in query_lower or "кникс" in query_lower or "кнх" in query_lower
-    
-    # КРИТИЧЕСКИ ВАЖНО: Если есть Алиса И (интеграция ИЛИ KNX) - сразу к ИИ
-    if has_alisa and (has_integration or has_knx):
-        print("✅ Решение: Алиса + интеграция/KNX → сразу к ИИ")
-        return True
-    
-    # Сложные вопросы про Алису
-    question_words = ["как", "что", "какой", "какая", "можно ли", "возможно ли", "каков", "подскажи", "посоветуй"]
-    if any(word in query_lower for word in question_words) and has_alisa:
-        print("✅ Решение: вопрос про Алису → к ИИ")
-        return True
-    
-    # Любой запрос содержащий "Алиса" и "KNX" вместе
-    if has_alisa and has_knx:
-        print("✅ Решение: Алиса + KNX → сразу к ИИ")
-        return True
-    
-    print("❌ Решение: обычный поиск документации")
-    return False
-
-def has_only_technical_files(results: list) -> bool:
-    """
-    Проверяет, содержат ли результаты только технические файлы
-    """
-    # Если это ссылка на папку - не считаем техническим
-    if results and results[0].get("is_folder_link"):
-        return False
-        
-    technical_patterns = ["r5-", "датчик", "sensor", "техническ", "паспорт", "technical"]
-    
-    for file_data in results:
-        file_name = file_data.get("name", "").lower()
-        # Если есть хоть один НЕ технический файл - возвращаем False
-        if not any(pattern in file_name for pattern in technical_patterns):
-            return False
-    
-    # Все файлы технические
-    return True
-
 async def handle_ai_directly(message: Message, text: str, state: FSMContext):
     """
     Обрабатывает запросы, которые сразу идут к ИИ
@@ -600,7 +540,8 @@ async def handle_ai_directly(message: Message, text: str, state: FSMContext):
     if any(keyword in query_lower for keyword in ["алис", "голосов", "alisa"]):
         context = (
             "Ты технический эксперт по интеграции систем умного дома. "
-            "Отвечай подробно на русском языке. "
+            "ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. "
+            "Не используй английский язык в ответах. "
             
             "Интеграция Яндекс Алисы с системами KNX:\n"
             "1. Требуется шлюз или контроллер с поддержкой голосового управления\n"
@@ -620,6 +561,8 @@ async def handle_ai_directly(message: Message, text: str, state: FSMContext):
         context = (
             "Ты эксперт по технической документации оборудования умного дома. "
             "Бренды: HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems. "
+            "ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. "
+            "Не используй английский язык в ответах. "
             "Отвечай кратко и по делу. Если не знаешь ответа - предложи связаться со специалистом."
         )
     
@@ -656,11 +599,10 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
 
     query_lower = text.lower()
 
-    # ВРЕМЕННО: Принудительно для тестирования
-    if "алис" in text.lower() and ("knx" in text.lower() or "подключи" in text.lower()):
-        print("🎯 ПРИНУДИТЕЛЬНО: Запрос про Алису → сразу к ИИ")
-        await handle_ai_directly(message, text, state)
-        return
+    # ВАЖНОЕ ИЗМЕНЕНИЕ: Теперь запросы про Алису идут в обычный поиск для получения ссылки
+    if "алис" in text.lower() and ("knx" in text.lower() or "подключи" in text.lower() or "интеграци" in text.lower()):
+        print("🎯 ОБНОВЛЕННО: Запрос про Алису → обычный поиск (для ссылки на документацию)")
+        # Продолжаем обычный поиск - не переходим к ИИ
 
     # Проверяем, нужно ли сразу подключать ИИ
     use_ai_directly = should_use_ai_directly(text)
@@ -671,7 +613,6 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
         return
 
     # Обычный поиск для других запросов
-    from bot.utils.search_engine import smart_document_search
     results = await smart_document_search(text)
 
     if results:
@@ -693,7 +634,13 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
         
         for i, file_data in enumerate(results[:3], 1):
             try:
-                direct_link = build_docs_url(file_data["path"])
+                # СПЕЦИАЛЬНАЯ ССЫЛКА ДЛЯ КАБЕЛЯ KNX YE00820
+                file_name = file_data.get("name", "").lower()
+                if "ye00820" in file_name and "knx" in file_name:
+                    direct_link = "https://docs.360.yandex.ru/docs/view?url=ya-disk-public%3A%2F%2Fh1up8PyRs7zLi0hvFuTbhsLh7Nh2dv1lmMR1wsc5WOjH0pYg8ba5c4cLlLY6oeuWtFP6gwbjvtaafTptcua4SA%3D%3D%3A%2F01.%20iOT%20Systems%2F02.%20iOT%20%D0%9A%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%2FYE00820%20KNX%20%D0%BA%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%20J-Y(ST)Y%2C%202x2x0%2C8%2C%20%D1%8D%D0%BA%D1%80%D0%B0%D0%BD%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%BD%D1%8B%D0%B9%20(%D0%BF%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BB%D1%8F%D0%B5%D1%82%D1%81%D1%8F%20%D0%BF%D0%BE%20100%D0%BC)%2FYE00820%20ru.pdf&name=YE00820%20ru.pdf&nosw=1"
+                else:
+                    direct_link = build_docs_url(file_data["path"])
+                
                 # Форматируем вывод с кликабельными ссылками
                 response += f"{i}. <b>{file_data['name']}</b>\n"
                 response += f"   └─ 📎 <a href='{direct_link}'>Открыть документ</a>\n\n"
@@ -795,8 +742,17 @@ async def handle_ask_ai_callback(callback: CallbackQuery, state: FSMContext):
     thinking_msg = await callback.message.answer("Сортирую информацию по полочкам... Сейчас всё объясню! 🗂️")
     
     await state.update_data(original_query=query)
-    context_brands = "HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems"
-    ai_response = await ask_ai(query, context=context_brands)
+    
+    # Контекст с требованием отвечать только на русском
+    context = (
+        "Ты эксперт по технической документации оборудования умного дома. "
+        "Бренды: HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems. "
+        "ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. "
+        "Не используй английский язык в ответах. "
+        "Отвечай кратко и по делу. Если не знаешь ответа - предложи связаться со специалистом."
+    )
+    
+    ai_response = await ask_ai(query, context=context)
     
     await thinking_msg.edit_text(
         f"🧠 {ai_response}\n\n"
