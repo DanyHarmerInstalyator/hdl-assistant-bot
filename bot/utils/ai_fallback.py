@@ -273,6 +273,13 @@ load_dotenv()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 logger = logging.getLogger(__name__)
 
+# Рабочие модели (приоритет по скорости и качеству)
+WORKING_MODELS = [
+    "google/gemma-2-9b-it:free",  # ✅ РАБОТАЕТ!
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "qwen/qwen-2.5-7b-instruct:free",
+]
+
 async def ask_ai(user_query: str, context: str = "") -> str:
     """
     Функция запросов к ИИ через OpenRouter
@@ -285,69 +292,73 @@ async def ask_ai(user_query: str, context: str = "") -> str:
         user_query = user_query[:500] + "..."
     
     system_prompt = (
-        "Вы — эксперт по технической документации оборудования умного дома (HDL, Buspro, Matech, URRI). "
-        "Отвечайте кратко и по делу. Если не знаете ответ — предложите связаться со специалистом."
+        "Ты — эксперт по технической документации оборудования умного дома HDL. "
+        "Отвечай кратко, информативно и по делу на русском языке. "
+        "Если не знаешь точного ответа — предложи связаться со специалистом или найти документацию."
     )
     if context:
-        system_prompt += f" Бренды: {context}"
+        system_prompt += f" Контекст: {context}"
 
-    try:
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://t.me/HDL_Assistant_Bot",
-            "X-Title": "HDL Assistant Bot"
-        }
-        
-        data = {
-            "model": "google/gemma-2-9b-it:free",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_query}
-            ],
-            "temperature": 0.3,
-            "max_tokens": 350,
-        }
+    # Пробуем модели по порядку
+    for model in WORKING_MODELS:
+        try:
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://t.me/HDL_Assistant_Bot",
+                "X-Title": "HDL Assistant Bot"
+            }
+            
+            data = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_query}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 500,  # Увеличил для более полных ответов
+            }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=30
-            ) as response:
-                
-                logger.info(f"📡 Статус ответа: {response.status}")
-                
-                if response.status == 200:
-                    result = await response.json()
-                    answer = result['choices'][0]['message']['content'].strip()
-                    logger.info("✅ ИИ ответил успешно")
-                    return answer
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json=data,
+                    timeout=30
+                ) as response:
                     
-                elif response.status == 404:
-                    error_text = await response.text()
-                    logger.error(f"❌ Ошибка 404: {error_text}")
-                    return (
-                        "🤖 ИИ временно недоступен.\n\n"
-                        "Для активации ИИ необходимо настроить политику приватности OpenRouter.\n\n"
-                        "А пока я могу:\n"
-                        "• 🔍 Найти документацию по вашему запросу\n"
-                        "• 📚 Показать базу технической документации\n"
-                        "• 📞 Связать с техническим специалистом"
-                    )
+                    logger.info(f"📡 Модель {model}, статус: {response.status}")
                     
-                else:
-                    error_text = await response.text()
-                    logger.error(f"❌ Ошибка {response.status}: {error_text}")
-                    return get_fallback_response()
+                    if response.status == 200:
+                        result = await response.json()
+                        answer = result['choices'][0]['message']['content'].strip()
+                        
+                        # Проверяем качество ответа
+                        if len(answer) < 5 or answer.lower() in ["asdf", "test", "hello"]:
+                            logger.warning(f"❌ Модель {model} вернула некорректный ответ: {answer}")
+                            continue
+                            
+                        logger.info(f"✅ ИИ ответил успешно через {model}")
+                        return answer
+                        
+                    elif response.status == 404:
+                        logger.warning(f"⚠️ Модель {model} недоступна, пробуем следующую...")
+                        continue
+                        
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"❌ Ошибка {response.status} для {model}: {error_text[:100]}")
+                        continue
 
-    except aiohttp.ClientError as e:
-        logger.error(f"❌ Ошибка подключения: {e}")
-        return "ИИ временно недоступен. Проблемы с подключением."
-    except Exception as e:
-        logger.error(f"❌ Неожиданная ошибка: {e}")
-        return get_fallback_response()
+        except aiohttp.ClientError as e:
+            logger.error(f"❌ Ошибка подключения для {model}: {e}")
+            continue
+        except Exception as e:
+            logger.error(f"❌ Неожиданная ошибка для {model}: {e}")
+            continue
+    
+    # Если ни одна модель не сработала
+    return get_fallback_response()
 
 def get_fallback_response() -> str:
     """Возвращает запасной ответ"""
