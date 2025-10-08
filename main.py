@@ -414,6 +414,8 @@
 
 # if __name__ == "__main__":
 #     asyncio.run(main())
+
+# Версия от 08.10.2025
 import os
 import asyncio
 import logging
@@ -569,6 +571,10 @@ def has_only_technical_files(results: list) -> bool:
     """
     Проверяет, содержат ли результаты только технические файлы
     """
+    # Если это ссылка на папку - не считаем техническим
+    if results and results[0].get("is_folder_link"):
+        return False
+        
     technical_patterns = ["r5-", "датчик", "sensor", "техническ", "паспорт", "technical"]
     
     for file_data in results:
@@ -665,44 +671,50 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
         return
 
     # Обычный поиск для других запросов
-    await message.answer(f"🔍 Ищу документацию по: <b>{text}</b>")
+    from bot.utils.search_engine import smart_document_search
     results = await smart_document_search(text)
 
     if results:
-        response = f"✅ Найдено документов: {len(results)}\n\n"
+        # Проверяем, является ли результат ссылкой на папку
+        if len(results) == 1 and results[0].get("is_folder_link"):
+            folder_link = results[0].get("folder_link")
+            await message.answer(
+                f"📁 <b>Документация по запросу: {text}</b>\n\n"
+                f"Для просмотра всей документации перейдите по ссылке:\n"
+                f"🔗 <a href='{folder_link}'>Открыть папку на Яндекс.Диске</a>\n\n"
+                f"В папке вы найдете все доступные документы, инструкции и технические паспорта.",
+                parse_mode="HTML"
+            )
+            return
         
-        # Создаем кнопки для документов
-        keyboard_buttons = []
+        # Стандартный вывод результатов поиска
+        response = f"🔍 Ищу документацию по: <b>{text}</b>\n\n"
+        response += f"✅ Найдено документов: {len(results)}\n\n"
         
         for i, file_data in enumerate(results[:3], 1):
             try:
                 direct_link = build_docs_url(file_data["path"])
+                # Форматируем вывод с кликабельными ссылками
                 response += f"{i}. <b>{file_data['name']}</b>\n"
-                
-                # Добавляем кнопку для каждого документа
-                keyboard_buttons.append(
-                    [InlineKeyboardButton(
-                        text=f"📄 Открыть документ {i}", 
-                        url=direct_link
-                    )]
-                )
+                response += f"   └─ 📎 <a href='{direct_link}'>Открыть документ</a>\n\n"
                 
             except Exception as e:
                 logging.error(f"Ошибка генерации ссылки: {e}")
                 response += f"{i}. <b>{file_data['name']}</b>\n"
-                response += f"📁 Файл в базе документации\n\n"
+                response += f"   └─ 📎 Файл в базе документации\n\n"
         
-        response += "\nНажмите на кнопку ниже чтобы открыть документ:"
+        response += "Полученная информация вам помогла?"
         
-        # Добавляем кнопки "Да/Нет" под кнопками документов
-        keyboard_buttons.append([
-            InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
-            InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
-        ])
-                
+        # Только кнопки Да/Нет (без кнопок документов)
         await message.answer(
             response,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
+                    InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
+                ]
+            ]),
+            parse_mode="HTML"  # Важно для кликабельных ссылок!
         )
         
         # Если нашли только технические паспорта для сложного запроса
