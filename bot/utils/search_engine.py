@@ -130,6 +130,18 @@ class SearchEngine:
             "яндекс алиса": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/02.%20HDL/09.%20%D0%98%D0%BD%D1%82%D0%B5%D0%B3%D1%80%D0%B0%D1%86%D0%B8%D1%8F%20%D1%81%20%D0%B3%D0%BE%D0%BB%D0%BE%D1%81%D0%BE%D0%B2%D1%8B%D0%BC%D0%B8%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D0%B0%D0%BC%D0%B8.%20Buspro%20%D0%B8%20KNX",
             "голосовой ассистент": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/02.%20HDL/09.%20%D0%98%D0%BD%D1%82%D0%B5%D0%B3%D1%80%D0%B0%D1%86%D0%B8%D1%8F%20%D1%81%20%D0%B3%D0%BE%D0%BB%D0%BE%D1%81%D0%BE%D0%B2%D1%8B%D0%BC%D0%B8%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D0%B0%D0%BC%D0%B8.%20Buspro%20%D0%B8%20KNX",
             "mgwip": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/02.%20HDL/09.%20%D0%98%D0%BD%D1%82%D0%B5%D0%B3%D1%80%D0%B0%D1%86%D0%B8%D1%8F%20%D1%81%20%D0%B3%D0%BE%D0%BB%D0%BE%D1%81%D0%BE%D0%B2%D1%8B%D0%BC%D0%B8%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D0%B0%D0%BC%D0%B8.%20Buspro%20%D0%B8%20KNX",
+            
+            # Easycool ссылки - все ведут на правильную папку
+            "изикул": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "easycool": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "изи кул": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "техничка на изикул": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "документация изикул": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "паспорт на изикул": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "нужна техничка на изикул": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "изикул баспро": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "изикул knx": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
+            "изикул buspro": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
         }
 
         # Ключевые слова для быстрой проверки
@@ -137,6 +149,10 @@ class SearchEngine:
         self._integration_keywords = {"интеграци", "настрои", "подключи", "связк", "связать", "объединить"}
         self._cable_keywords = {"кабель", "cable", "техничка на кабель", "кабель иот", "кабель iot", "iot кабель"}
         self._lock_keywords = {"замок", "замки", "дверной замок", "дверные замки", "замки iot", "замки иот", "iot замок"}
+        self._easycool_keywords = {
+            "изикул", "easycool", "изи кул", "техничка на изикул", "документация изикул", 
+            "паспорт на изикул", "нужна техничка на изикул", "изикул баспро", "изикул knx", "изикул buspro"
+        }
 
     def load_index(self) -> List[Dict[str, Any]]:
         """Загрузка индекса из файла"""
@@ -170,6 +186,8 @@ class SearchEngine:
     def expand_synonyms(self, query: str) -> List[str]:
         """Расширяет запрос синонимами"""
         normalized_query = self.normalize_text(query)
+        logging.info(f"🔤 Нормализованный запрос: '{query}' -> '{normalized_query}'")
+        
         words = normalized_query.split()
         
         if not words:
@@ -185,19 +203,30 @@ class SearchEngine:
                     new_words[i] = synonym
                     expanded_queries.add(' '.join(new_words))
         
-        return list(expanded_queries)
+        result = list(expanded_queries)
+        logging.info(f"🔄 Расширенные запросы: {result}")
+        return result
 
     def should_redirect_to_folder(self, query: str) -> Tuple[bool, str]:
         """Проверяет, нужно ли перенаправить на папку Яндекс.Диска"""
         query_lower = query.lower().strip()
         
+        logging.info(f"🔍 Проверка перенаправления для: '{query}' -> '{query_lower}'")
+        
+        # ВЫСШИЙ ПРИОРИТЕТ: Проверяем точные совпадения (полное совпадение запроса)
+        if query_lower in self.folder_links:
+            logging.info(f"🎯 ТОЧНОЕ СОВПАДЕНИЕ: '{query}' -> папка")
+            return True, self.folder_links[query_lower]
+        
+        # ВЫСОКИЙ ПРИОРИТЕТ: Easycool запросы (любой запрос содержащий изикул)
+        easycool_patterns = ["изикул", "easycool", "изи кул"]
+        if any(pattern in query_lower for pattern in easycool_patterns):
+            logging.info(f"🎯 EASYCOOL ЗАПРОС: '{query}' -> папка Easycool")
+            return True, "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool"
+        
         # ИСКЛЮЧАЕМ запросы с KNX - они должны идти к специальному правилу
         if "knx" in query_lower:
             return False, ""
-        
-        # Проверяем точные совпадения
-        if query_lower in self.folder_links:
-            return True, self.folder_links[query_lower]
         
         # Проверяем частичные совпадения для кабелей (без KNX)
         if any(keyword in query_lower for keyword in self._cable_keywords) and "knx" not in query_lower:
@@ -207,6 +236,7 @@ class SearchEngine:
         if any(keyword in query_lower for keyword in self._lock_keywords):
             return True, self.folder_links["замки"]
         
+        logging.info(f"❌ Перенаправление не требуется для: '{query}'")
         return False, ""
 
     def is_knx_cable_query(self, query: str) -> bool:
@@ -269,6 +299,32 @@ class SearchEngine:
         # Сортируем по убыванию релевантности
         scored_files.sort(key=lambda x: x[0], reverse=True)
         return [file_data for score, file_data in scored_files]
+
+    def filter_irrelevant_results(self, results: List[Dict], query: str) -> List[Dict]:
+        """Фильтрует явно нерелевантные результаты"""
+        if not results:
+            return []
+        
+        query_lower = query.lower()
+        filtered_results = []
+        
+        for result in results:
+            name = result.get('name', '').lower()
+            path = result.get('path', '').lower()
+            
+            # Пропускаем технические паспорта для сложных запросов
+            if any(word in query_lower for word in ['интеграц', 'протокол', 'api', 'настройк', 'как']):
+                if any(tech_word in name for tech_word in ['паспорт', 'datasheet', 'техническ', 'r5-', 'технический']):
+                    continue  # Пропускаем технические паспорта для вопросов по интеграции
+            
+            # Пропускаем нерелевантные файлы для запросов про контроллеры
+            if 'контроллер' in query_lower or 'controller' in query_lower:
+                if any(irrelevant in name for irrelevant in ['датчик', 'sensor', 'реле', 'relay', 'кабель', 'cable']):
+                    continue
+            
+            filtered_results.append(result)
+        
+        return filtered_results
 
     def calculate_relevance(self, file_data: Dict[str, Any], query_variants: List[str]) -> float:
         """Вычисляет релевантность файла запросу"""
@@ -348,6 +404,11 @@ class SearchEngine:
         query_variants = self.expand_synonyms(query)
         logging.info(f"📋 Варианты запроса: {query_variants}")
         
+        # ОТЛАДКА: выведем первые 10 файлов из индекса для проверки
+        logging.info(f"📁 Всего файлов в индексе: {len(self.file_index)}")
+        for i, file_data in enumerate(self.file_index[:10]):
+            logging.info(f"  {i+1}. {file_data.get('name', '')} -> {file_data.get('norm_name', '')}")
+        
         scored_results = []
         
         # Обрабатываем список файлов
@@ -374,6 +435,8 @@ class SearchEngine:
         Гибридный поиск: сначала проверяем специальные правила,
         затем обычный поиск
         """
+        logging.info(f"🔍 Запуск гибридного поиска для: '{query}'")
+        
         # 1. СПЕЦИАЛЬНОЕ ПРАВИЛО ДЛЯ ИНТЕГРАЦИИ С АЛИСОЙ - ВЫСШИЙ ПРИОРИТЕТ
         if self.is_alisa_integration_query(query):
             logging.info(f"🎯 ИНТЕГРАЦИЯ АЛИСА: запрос '{query}' → ссылка на документацию")
@@ -405,10 +468,11 @@ class SearchEngine:
         # 4. УЛУЧШЕННЫЙ ПОИСК
         improved_results = self.search(query, limit * 2)  # Ищем больше для фильтрации
         improved_results = self.filter_irrelevant_results(improved_results, query)
+        
         if improved_results:
             logging.info(f"✅ Улучшенный поиск нашел {len(improved_results)} результатов")
             return improved_results[:limit]
-        
+
         # 5. СТАРЫЙ ПОИСК ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
         logging.info("🔄 Используем старый поисковый алгоритм")
         try:
@@ -510,7 +574,7 @@ class SearchEngine:
             score = sum(30 for keyword in found_important if keyword in norm_name)
             
             if score > 0:
-                scored_files.append((score, file_data))
+                scored_files.append(score, file_data)
         
         scored_files.sort(key=lambda x: x[0], reverse=True)
         return [file_data for score, file_data in scored_files]
@@ -519,8 +583,12 @@ class SearchEngine:
 # Функции для обратной совместимости
 async def smart_document_search(query: str, limit: int = 3) -> List[Dict[str, Any]]:
     """Умный поиск документов (асинхронная версия)"""
-    search_engine = SearchEngine()
-    return search_engine.hybrid_search(query, limit)
+    try:
+        search_engine = SearchEngine()
+        return search_engine.hybrid_search(query, limit)
+    except Exception as e:
+        logging.error(f"❌ Ошибка в smart_document_search: {e}")
+        return []
 
 def search_in_file_index(query: str, index_path: str = "data/cache/file_index.json") -> List[Dict]:
     """Старая функция поиска (для обратной совместимости)"""
@@ -550,98 +618,30 @@ def should_use_ai_directly(query: str) -> bool:
     """
     Определяет, нужно ли сразу подключать ИИ без поиска документации
     """
-    query_lower = query.lower().strip()
-    
-    # Запросы, которые сразу идут к ИИ (сложные технические вопросы)
-    ai_direct_keywords = {
-        # Общие технические вопросы
-        "как интегрировать", "как подключить", "как настроить", "как работает",
-        "как сделать", "как использовать", "как реализовать", "как объединить",
-        "интегрировать протокол", "подключить протокол", "настроить протокол",
-        "протоколы умного дома", "совместимость протоколов", 
-        "взаимодействие протоколов", "связь протоколов",
-        
-        # Сравнения и выбор
-        "какой лучше", "что выбрать", "сравните", "отличия", "разница между",
-        "преимущества", "недостатки", "плюсы и минусы",
-        
-        # Проблемы и ошибки
-        "проблема с", "ошибка", "не работает", "не подключается", 
-        "не настраивается", "сломал", "не отвечает",
-        
-        # Объяснения
-        "почему", "зачем", "как устроен", "принцип работы", "объясните",
-        "расскажите о", "что такое", "в чем разница",
-        
-        # Сложные технические темы
-        "протокол", "интеграци", "api", "rest api", "websocket", "mqtt",
-        "knx ip", "bacnet", "modbus", "zigbee", "z-wave", "wi-fi",
-        "автоматизаци", "сценарий", "сценар", "логика"
-    }
-    
-    # Проверяем, содержит ли запрос ключевые слова для прямого подключения к ИИ
-    has_ai_keywords = any(keyword in query_lower for keyword in ai_direct_keywords)
-    
-    # Определяем тип запроса
-    is_howto_question = any(phrase in query_lower for phrase in [
-        "как интегрировать", "как подключить", "как настроить", "как работает"
-    ])
-    
-    is_protocol_question = any(word in query_lower for word in [
-        "протокол", "интеграци", "api", "совместимость", "взаимодействие"
-    ])
-    
-    is_complex_technical = any(word in query_lower for word in [
-        "принцип работы", "объясните", "расскажите", "что такое", "сравните"
-    ])
-    
-    # Логика принятия решения
-    if has_ai_keywords:
-        logging.info(f"✅ Решение: сложный технический запрос '{query}' → к ИИ")
-        return True
-    
-    # Особые случаи, когда НЕ использовать ИИ
-    simple_search_keywords = {
-        "документ", "документация", "инструкция", "паспорт", "руководство",
-        "скачать", "файл", "pdf", "схема", "чертеж", "техническ",
-        "алис", "mgwip", "кабель", "замок", "датчик", "реле"
-    }
-    
-    if any(keyword in query_lower for keyword in simple_search_keywords):
-        logging.info(f"❌ Решение: запрос на поиск документации '{query}' → обычный поиск")
-        return False
-    
-    # Для коротких запросов - обычный поиск
-    if len(query_lower.split()) <= 2:
-        logging.info(f"❌ Решение: короткий запрос '{query}' → обычный поиск")
-        return False
-    
-    # По умолчанию для сложных запросов используем ИИ
-    words_count = len(query_lower.split())
-    if words_count >= 4:  # Длинные запросы скорее всего сложные вопросы
-        logging.info(f"✅ Решение: длинный сложный запрос '{query}' → к ИИ")
-        return True
-    
-    logging.info(f"❌ Решение: обычный запрос '{query}' → обычный поиск")
-    return False
-
-def filter_irrelevant_results(self, results: List[Dict], query: str) -> List[Dict]:
-    """Фильтрует явно нерелевантные результаты"""
-    if not results:
-        return []
-    
     query_lower = query.lower()
-    filtered_results = []
     
-    for result in results:
-        name = result.get('name', '').lower()
-        path = result.get('path', '').lower()
-        
-        # Пропускаем технические паспорта для сложных запросов
-        if any(word in query_lower for word in ['интеграц', 'протокол', 'api', 'настройк']):
-            if any(tech_word in name for tech_word in ['паспорт', 'datasheet', 'техническ', 'r5-']):
-                continue  # Пропускаем технические паспорта для вопросов по интеграции
-        
-        filtered_results.append(result)
+    # ВАЖНОЕ ИЗМЕНЕНИЕ: ВСЕ запросы про Алису идут в обычный поиск для получения ссылки
+    alisa_keywords = {
+        "алис", "яндекс алис", "yandex alice", "alisa", "mgwip", 
+        "голосов", "голосовой", "ассистент", "шлюз", "интеграци"
+    }
     
-    return filtered_results
+    if any(keyword in query_lower for keyword in alisa_keywords):
+        logging.info("❌ Решение: запрос про Алису → обычный поиск (для ссылки на документацию)")
+        return False
+    
+    # Остальная логика для других типов запросов
+    complex_question_words = {
+        "почему", "какой лучше", "что выбрать", "сравни", "отличия", 
+        "проблема", "ошибка", "не работает", "не подключается", "сломал"
+    }
+    
+    is_complex_question = any(word in query_lower for word in complex_question_words)
+    
+    # Технические проблемы с другим оборудованием (кроме Алисы)
+    if is_complex_question and not any(alisa_keyword in query_lower for alisa_keyword in alisa_keywords):
+        logging.info("✅ Решение: техническая проблема → к ИИ")
+        return True
+    
+    logging.info("❌ Решение: обычный поиск документации")
+    return False
