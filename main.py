@@ -1,426 +1,9 @@
-                        #    2 version HDL BOT
-
-
-
-# import asyncio
-# import logging
-# import sys
-# import os
-# from aiogram import Bot, Dispatcher
-# from aiogram.client.default import DefaultBotProperties
-# from aiogram.enums import ParseMode
-# from aiogram.filters import CommandStart
-# from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-# from dotenv import load_dotenv
-
-# from bot.utils.yandex_disk_client import search_in_file_index, build_docs_url
-# from bot.utils.ai_fallback import ask_qwen
-
-# load_dotenv()
-
-# BOT_TOKEN = os.getenv("BOT_TOKEN")
-# YANDEX_DISK_FOLDER_PATH = os.getenv("YANDEX_DISK_FOLDER_PATH", "/")
-# YANDEX_DISK_PUBLIC_KEY = os.getenv("YANDEX_DISK_PUBLIC_KEY")
-# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# if not BOT_TOKEN:
-#     raise ValueError("❌ BOT_TOKEN не найден в .env")
-# if not YANDEX_DISK_PUBLIC_KEY:
-#     raise ValueError("❌ YANDEX_DISK_PUBLIC_KEY не найден в .env")
-# if not OPENROUTER_API_KEY:
-#     raise ValueError("❌ OPENROUTER_API_KEY не найден в .env")
-
-# logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-# bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-# dp = Dispatcher()
-
-# # ✅ Функция клавиатуры — ВНЕ обработчика!
-# def get_support_keyboard() -> InlineKeyboardMarkup:
-#     button = InlineKeyboardButton(
-#         text="📞 Связаться с тех. специалистом",
-#         url="https://t.me/hdl_support"  
-#     )
-#     return InlineKeyboardMarkup(inline_keyboard=[[button]])
-
-# @dp.message(CommandStart())
-# async def command_start_handler(message: Message) -> None:
-#     await message.answer(
-#         "Привет!👨‍💻 Я HDL Assistant помогу найти любую техническую документацию.\n\n"
-#         "Просто напишите запрос, например:\n"
-#         "<i>Buspro MDL64-BP.53</i>\n"
-#         "<i>HDL DALI контроллер</i>\n"
-#         "<i>Matech датчик движения</i>"
-#     )
-
-# @dp.message()
-# async def handle_document_request(message: Message) -> None:  
-#     user_query = message.text.strip()
-#     if not user_query:
-#         await message.answer("Пожалуйста, введите запрос.")
-#         return
-
-#     await message.answer(f"🔍 Ищу документацию по: <b>{user_query}</b>")
-
-#     results = search_in_file_index(user_query)
-
-#     if results:
-#         best = results[0]
-#         try:
-#             direct_link = build_docs_url(best["path"])
-#             await message.answer(
-#                 f"✅ Найдена документация:\n<b>{best['name']}</b>\n\n"
-#                 f"🔗 Прямая ссылка на PDF:\n{direct_link}"
-#             )
-#         except Exception as e:
-#             base = YANDEX_DISK_FOLDER_PATH.rstrip("/")
-#             relative_path = (
-#                 best["path"][len(base):].lstrip("/")
-#                 if best["path"].startswith(base)
-#                 else best["path"].lstrip("/")
-#             )
-#             await message.answer(
-#                 f"✅ Найдена документация:\n<b>{best['name']}</b>\n\n"
-#                 f"📁 Путь в папке:\n<code>{relative_path}</code>\n\n"
-#                 f"🔗 Общая папка: https://disk.360.yandex.ru/d/{YANDEX_DISK_PUBLIC_KEY}"
-#             )
-#     else:
-#         thinking_msg = await message.answer("🧠 ИИ думает... Подождите немного.")
-#         context_brands = "HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems"
-#         ai_response = await ask_qwen(user_query, context=context_brands)
-#         await thinking_msg.edit_text(
-#             f"🔍 Документация не найдена. ИИ 👨‍💻 отвечает:\n\n{ai_response}",
-#             reply_markup=get_support_keyboard()
-#         )
-
-# async def main() -> None:
-#     await dp.start_polling(bot)
-
-# if __name__ == "__main__":
-#     asyncio.run(main())
-
-
-                                       #    3 version HDL BOT
-
-
-# import asyncio
-# import logging
-# import sys
-# import os
-# from aiogram import Bot, Dispatcher
-# from aiogram.client.default import DefaultBotProperties
-# from aiogram.enums import ParseMode
-# from aiogram.filters import CommandStart
-# from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-# from aiogram.fsm.state import State, StatesGroup
-# from aiogram.fsm.context import FSMContext
-# from dotenv import load_dotenv
-
-# from bot.utils.yandex_disk_client import search_in_file_index, build_docs_url
-# from bot.utils.ai_fallback import ask_qwen
-
-# load_dotenv()
-
-# BOT_TOKEN = os.getenv("BOT_TOKEN")
-# YANDEX_DISK_FOLDER_PATH = os.getenv("YANDEX_DISK_FOLDER_PATH", "/")
-# YANDEX_DISK_PUBLIC_KEY = os.getenv("YANDEX_DISK_PUBLIC_KEY")
-# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# if not BOT_TOKEN:
-#     raise ValueError("❌ BOT_TOKEN не найден в .env")
-# if not YANDEX_DISK_PUBLIC_KEY:
-#     raise ValueError("❌ YANDEX_DISK_PUBLIC_KEY не найден в .env")
-# if not OPENROUTER_API_KEY:
-#     raise ValueError("❌ OPENROUTER_API_KEY не найден в .env")
-
-# logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-# bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-# dp = Dispatcher()
-
-# # --- FSM для формы поддержки ---
-# class SupportForm(StatesGroup):
-#     name = State()
-#     phone = State()
-
-# # --- Клавиатуры ---
-# def get_support_keyboard() -> InlineKeyboardMarkup:
-#     """Кнопка для начала заполнения формы."""
-#     return InlineKeyboardMarkup(inline_keyboard=[
-#         [InlineKeyboardButton(text="📞 Связаться с тех. специалистом", callback_data="support_form")]
-#     ])
-
-# def get_chat_button() -> InlineKeyboardMarkup:
-#     """Кнопка перехода в чат после отправки данных."""
-#     return InlineKeyboardMarkup(inline_keyboard=[
-#         [InlineKeyboardButton(text="💬 Написать специалисту", url="https://t.me/hdl_support")]
-#     ])
-
-# # --- Обработчики ---
-# @dp.message(CommandStart())
-# async def command_start_handler(message: Message) -> None:
-#     await message.answer(
-#         "Привет!👨‍💻 Я HDL Assistant помогу найти любую техническую документацию.\n\n"
-#         "Просто напишите запрос, например:\n"
-#         "<i>Buspro MDL64-BP.53</i>\n"
-#         "<i>HDL DALI контроллер</i>\n"
-#         "<i>Matech датчик движения</i>"
-#     )
-
-# @dp.callback_query(lambda c: c.data == "support_form")
-# async def support_form_start(callback: CallbackQuery, state: FSMContext):
-#     await callback.answer()
-#     await callback.message.answer("Пожалуйста, укажите ваше ФИО:")
-#     await state.set_state(SupportForm.name)
-
-# @dp.message(SupportForm.name)
-# async def process_name(message: Message, state: FSMContext):
-#     await state.update_data(name=message.text)
-#     await message.answer("Укажите ваш номер телефона (например, +7 999 123-45-67):")
-#     await state.set_state(SupportForm.phone)
-
-# @dp.message(SupportForm.phone)
-# async def process_phone(message: Message, state: FSMContext):
-#     phone = message.text
-#     data = await state.get_data()
-#     name = data["name"]
-
-#     # Формируем сообщение для отправки в поддержку
-#     support_text = (
-#         f"📩 Новая заявка от пользователя:\n\n"
-#         f"👤 ФИО: {name}\n"
-#         f"📱 Телефон: {phone}\n"
-#         f"🆔 ID: {message.from_user.id}\n"
-#         f"🔗 @ {message.from_user.username or 'нет username'}"
-#     )
-
-#     # Отправляем в чат поддержки (если это публичный канал/группа, где бот админ)
-#     try:
-#         await bot.send_message(chat_id="-1003044266223", text=support_text)
-#     except Exception as e:
-#         # Если не получилось — логируем и отправляем админу (опционально)
-#         print(f"Ошибка отправки в группу: {e}")
-#         # Можно добавить отправку вам по ID, если нужно
-
-#     # Отправляем пользователю кнопку для перехода
-#     await message.answer(
-#         "✅ Ваша заявка отправлена!\n\n"
-#         "Теперь вы можете написать напрямую специалисту:",
-#         reply_markup=get_chat_button()
-#     )
-#     await state.clear()
-
-# @dp.message()
-# async def handle_document_request(message: Message) -> None:
-#     user_query = message.text.strip()
-#     if not user_query:
-#         await message.answer("Пожалуйста, введите запрос.")
-#         return
-
-#     await message.answer(f"🔍 Ищу документацию по: <b>{user_query}</b>")
-
-#     results = search_in_file_index(user_query)
-
-#     if results:
-#         best = results[0]
-#         try:
-#             direct_link = build_docs_url(best["path"])
-#             await message.answer(
-#                 f"✅ Найдена документация:\n<b>{best['name']}</b>\n\n"
-#                 f"🔗 Прямая ссылка на PDF:\n{direct_link}"
-#             )
-#         except Exception as e:
-#             base = YANDEX_DISK_FOLDER_PATH.rstrip("/")
-#             relative_path = (
-#                 best["path"][len(base):].lstrip("/")
-#                 if best["path"].startswith(base)
-#                 else best["path"].lstrip("/")
-#             )
-#             await message.answer(
-#                 f"✅ Найдена документация:\n<b>{best['name']}</b>\n\n"
-#                 f"📁 Путь в папке:\n<code>{relative_path}</code>\n\n"
-#                 f"🔗 Общая папка: https://disk.360.yandex.ru/d/{YANDEX_DISK_PUBLIC_KEY}"
-#             )
-#     else:
-#         thinking_msg = await message.answer("🧠 ИИ думает... Подождите немного.")
-#         context_brands = "HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems"
-#         ai_response = await ask_qwen(user_query, context=context_brands)
-#         await thinking_msg.edit_text(
-#             f"🔍 Документация не найдена. ИИ 👨‍💻 отвечает:\n\n{ai_response}",
-#             reply_markup=get_support_keyboard()
-#         )
-
-# # --- Запуск ---
-# async def main() -> None:
-#     await dp.start_polling(bot)
-
-# if __name__ == "__main__":
-#     asyncio.run(main())
-
-
-
-
-
-
-# import asyncio
-# import logging
-# import sys
-# import os
-# from aiogram import Bot, Dispatcher
-# from aiogram.client.default import DefaultBotProperties
-# from aiogram.enums import ParseMode
-# from aiogram.filters import CommandStart
-# from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-# from aiogram.fsm.state import State, StatesGroup
-# from aiogram.fsm.context import FSMContext
-# from dotenv import load_dotenv
-
-# from bot.utils.yandex_disk_client import search_in_file_index, build_docs_url
-# from bot.utils.ai_fallback import ask_qwen
-
-# load_dotenv()
-
-# BOT_TOKEN = os.getenv("BOT_TOKEN")
-# YANDEX_DISK_FOLDER_PATH = os.getenv("YANDEX_DISK_FOLDER_PATH", "/")
-# YANDEX_DISK_PUBLIC_KEY = os.getenv("YANDEX_DISK_PUBLIC_KEY")
-# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# if not BOT_TOKEN:
-#     raise ValueError("❌ BOT_TOKEN не найден в .env")
-# if not YANDEX_DISK_PUBLIC_KEY:
-#     raise ValueError("❌ YANDEX_DISK_PUBLIC_KEY не найден в .env")
-# if not OPENROUTER_API_KEY:
-#     raise ValueError("❌ OPENROUTER_API_KEY не найден в .env")
-
-# logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-# bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-# dp = Dispatcher()
-
-# # --- FSM для формы поддержки ---
-# class SupportForm(StatesGroup):
-#     name = State()
-#     phone = State()
-#     original_query = State()  # Сохраняем исходный вопрос
-
-# # --- Клавиатуры ---
-# def get_support_keyboard() -> InlineKeyboardMarkup:
-#     return InlineKeyboardMarkup(inline_keyboard=[
-#         [InlineKeyboardButton(text="📞 Связаться с тех. специалистом", callback_data="support_form")]
-#     ])
-
-# def get_chat_button() -> InlineKeyboardMarkup:
-#     return InlineKeyboardMarkup(inline_keyboard=[
-#         [InlineKeyboardButton(text="💬 Написать специалисту", url="https://t.me/hdl_support")]
-#     ])
-
-# # --- Обработчики ---
-# @dp.message(CommandStart())
-# async def command_start_handler(message: Message) -> None:
-#     await message.answer(
-#         "Привет!👨‍💻 Меня зовут HDL Assistant и я здесь для того, чтобы технические вопросы решались легко и быстро.\n\n"
-#         "Запутались в документации? Нужна спецификация или мануал? Я с радостью помогу!\n"
-#     )
-
-# @dp.callback_query(lambda c: c.data == "support_form")
-# async def support_form_start(callback: CallbackQuery, state: FSMContext):
-#     await callback.answer()
-#     await callback.message.answer("Пожалуйста, укажите ваше ФИО:")
-#     await state.set_state(SupportForm.name)
-
-# @dp.message(SupportForm.name)
-# async def process_name(message: Message, state: FSMContext):
-#     await state.update_data(name=message.text)
-#     await message.answer("Укажите ваш номер телефона (например, +7 999 123-45-67):")
-#     await state.set_state(SupportForm.phone)
-
-# @dp.message(SupportForm.phone)
-# async def process_phone(message: Message, state: FSMContext):
-#     phone = message.text
-#     data = await state.get_data()
-#     name = data["name"]
-#     original_query = data.get("original_query", "Запрос не сохранён")
-
-#     support_text = (
-#         f"📩 Новая заявка от пользователя:\n\n"
-#         f"👤 ФИО: {name}\n"
-#         f"📱 Телефон: {phone}\n"
-#         f"🆔 ID: {message.from_user.id}\n"
-#         f"🔗 @ {message.from_user.username or 'нет username'}\n\n"
-#         f"❓ Вопрос пользователя:\n{original_query}"
-#     )
-
-#     # Отправка в группу поддержки
-#     GROUP_CHAT_ID = -1003044266223 
-#     try:
-#         await bot.send_message(chat_id=-1003044266223, text=support_text)
-#     except Exception as e:
-#         print(f"Ошибка отправки в группу: {e}")
-#         await message.answer("Не удалось отправить заявку. Попробуйте позже.")
-#         await state.clear()
-#         return
-
-#     await message.answer(
-#         "✅ Ваша заявка отправлена!\n\n"
-#         "Специалист свяжется с вами в ближайшее время.",
-#         reply_markup=get_chat_button()
-#     )
-#     await state.clear()
-
-# @dp.message()
-# async def handle_document_request(message: Message, state: FSMContext) -> None:
-#     user_query = message.text.strip()
-#     if not user_query:
-#         await message.answer("Пожалуйста, введите запрос.")
-#         return
-
-#     await message.answer(f"🔍 Уже ищу! Один момент... 👨‍💻: <b>{user_query}</b>")
-
-#     results = search_in_file_index(user_query)
-
-#     if results:
-#         best = results[0]
-#         try:
-#             direct_link = build_docs_url(best["path"])
-#             await message.answer(
-#                 f"✅ Найдена документация:\n<b>{best['name']}</b>\n\n"
-#                 f"🔗 Прямая ссылка на PDF:\n{direct_link}"
-#             )
-#         except Exception as e:
-#             base = YANDEX_DISK_FOLDER_PATH.rstrip("/")
-#             relative_path = (
-#                 best["path"][len(base):].lstrip("/")
-#                 if best["path"].startswith(base)
-#                 else best["path"].lstrip("/")
-#             )
-#             await message.answer(
-#                 f"✅ Найдена документация:\n<b>{best['name']}</b>\n\n"
-#                 f"📁 Путь в папке:\n<code>{relative_path}</code>\n\n"
-#                 f"🔗 Общая папка: https://disk.360.yandex.ru/d/{YANDEX_DISK_PUBLIC_KEY}"
-#             )
-#     else:
-#         thinking_msg = await message.answer("Сортирую информацию по полочкам... Сейчас всё объясню! 🗂️")
-#         context_brands = "HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems"
-#         ai_response = await ask_qwen(user_query, context=context_brands)
-        
-#         # Сохраняем исходный запрос для формы поддержки
-#         await state.update_data(original_query=user_query)
-        
-#         await thinking_msg.edit_text(
-#             f"🔍 Вот что я нашёл:\n\n{ai_response}",
-#             reply_markup=get_support_keyboard()
-#         )
-
-# # --- Запуск ---
-# async def main() -> None:
-#     await dp.start_polling(bot)
-
-# if __name__ == "__main__":
-#     asyncio.run(main())
-
-# Версия от 08.10.2025
 import os
 import asyncio
 import logging
 import sys
 import re
+from typing import List, Dict
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -464,6 +47,132 @@ class SupportForm(StatesGroup):
     name = State()
     phone = State()
     original_query = State()
+
+def should_use_ai_improved(query: str) -> bool:
+    """
+    Улучшенная логика определения когда использовать ИИ
+    """
+    query_lower = query.lower().strip()
+    
+    # Запросы, которые сразу идут к ИИ (сложные технические вопросы)
+    ai_direct_keywords = {
+        # Общие технические вопросы
+        "как интегрировать", "как подключить", "как настроить", "как работает",
+        "как сделать", "как использовать", "как реализовать", "как объединить",
+        "интегрировать протокол", "подключить протокол", "настроить протокол",
+        "протоколы умного дома", "совместимость протоколов", 
+        "взаимодействие протоколов", "связь протоколов",
+        
+        # Сравнения и выбор
+        "какой лучше", "что выбрать", "сравните", "отличия", "разница между",
+        "преимущества", "недостатки", "плюсы и минусы",
+        
+        # Проблемы и ошибки
+        "проблема с", "ошибка", "не работает", "не подключается", 
+        "не настраивается", "сломал", "не отвечает",
+        
+        # Объяснения
+        "почему", "зачем", "как устроен", "принцип работы", "объясните",
+        "расскажите о", "что такое", "в чем разница",
+        
+        # Сложные технические темы
+        "протокол", "интеграци", "api", "rest api", "websocket", "mqtt",
+        "knx ip", "bacnet", "modbus", "zigbee", "z-wave", "wi-fi",
+        "автоматизаци", "сценарий", "сценар", "логика"
+    }
+    
+    # Проверяем, содержит ли запрос ключевые слова для прямого подключения к ИИ
+    has_ai_keywords = any(keyword in query_lower for keyword in ai_direct_keywords)
+    
+    # Определяем тип запроса
+    is_howto_question = any(phrase in query_lower for phrase in [
+        "как интегрировать", "как подключить", "как настроить", "как работает"
+    ])
+    
+    is_protocol_question = any(word in query_lower for word in [
+        "протокол", "интеграци", "api", "совместимость", "взаимодействие"
+    ])
+    
+    is_complex_technical = any(word in query_lower for word in [
+        "принцип работы", "объясните", "расскажите", "что такое", "сравните"
+    ])
+    
+    # Логика принятия решения
+    if has_ai_keywords:
+        logging.info(f"✅ Решение: сложный технический запрос '{query}' → к ИИ")
+        return True
+    
+    # Особые случаи, когда НЕ использовать ИИ
+    simple_search_keywords = {
+        "документ", "документация", "инструкция", "паспорт", "руководство",
+        "скачать", "файл", "pdf", "схема", "чертеж", "техническ",
+        "алис", "mgwip", "кабель", "замок", "датчик", "реле"
+    }
+    
+    if any(keyword in query_lower for keyword in simple_search_keywords):
+        logging.info(f"❌ Решение: запрос на поиск документации '{query}' → обычный поиск")
+        return False
+    
+    # Для коротких запросов - обычный поиск
+    if len(query_lower.split()) <= 2:
+        logging.info(f"❌ Решение: короткий запрос '{query}' → обычный поиск")
+        return False
+    
+    # По умолчанию для сложных запросов используем ИИ
+    words_count = len(query_lower.split())
+    if words_count >= 4:  # Длинные запросы скорее всего сложные вопросы
+        logging.info(f"✅ Решение: длинный сложный запрос '{query}' → к ИИ")
+        return True
+    
+    logging.info(f"❌ Решение: обычный запрос '{query}' → обычный поиск")
+    return False
+
+def extract_brands_from_query(query: str) -> str:
+    """Извлекает бренды из запроса для контекста ИИ"""
+    query_lower = query.lower()
+    brands = []
+    
+    brand_keywords = {
+        "hdl": "HDL",
+        "урри": "URRI", 
+        "urri": "URRI",
+        "баспро": "Buspro",
+        "buspro": "Buspro",
+        "матек": "Matech",
+        "matech": "Matech",
+        "иот": "iOT Systems",
+        "iot": "iOT Systems",
+        "алис": "Яндекс Алиса",
+        "alisa": "Яндекс Алиса",
+        "yeelight": "Yeelight Pro",
+        "йилайт": "Yeelight Pro",
+        "coolautomation": "CoolAutomation"
+    }
+    
+    for keyword, brand in brand_keywords.items():
+        if keyword in query_lower:
+            brands.append(brand)
+    
+    return ", ".join(set(brands)) if brands else ""
+
+def format_search_results(results: List[Dict], query: str) -> str:
+    """Форматирует результаты поиска в читаемый вид"""
+    if not results:
+        return "❌ По вашему запросу ничего не найдено"
+    
+    response = f"🔍 Результаты поиска по: '{query}'\n\n"
+    
+    for i, result in enumerate(results[:5], 1):
+        name = result.get('name', 'Без названия')
+        docs_url = build_docs_url(result['path']) if 'path' in result else result.get('folder_link', '#')
+        
+        if result.get('is_folder_link'):
+            response += f"{i}. 📁 {name}\n   └─ 🔗 [Открыть папку]({docs_url})\n\n"
+        else:
+            response += f"{i}. {name}\n   └─ 📎 [Открыть документ]({docs_url})\n\n"
+    
+    response += "Полученная информация вам помогла?"
+    return response
 
 # --- Обработчики ---
 @dp.message(CommandStart())
@@ -530,7 +239,7 @@ async def handle_ai_directly(message: Message, text: str, state: FSMContext):
     """
     Обрабатывает запросы, которые сразу идут к ИИ
     """
-    thinking_msg = await message.answer("Сортирую информацию по полочкам... Сейчас всё объясню! 🗂️")
+    thinking_msg = await message.answer("🤔 Анализирую ваш технический вопрос...")
     
     await state.update_data(original_query=text)
     
@@ -558,9 +267,11 @@ async def handle_ai_directly(message: Message, text: str, state: FSMContext):
             "Если нужны конкретные модели или инструкции - предложи связаться со специалистом."
         )
     else:
+        # Извлекаем бренды из запроса для контекста
+        brands_context = extract_brands_from_query(text)
         context = (
             "Ты эксперт по технической документации оборудования умного дома. "
-            "Бренды: HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems. "
+            f"Бренды: {brands_context if brands_context else 'HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems'}. "
             "ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. "
             "Не используй английский язык в ответах. "
             "Отвечай кратко и по делу. Если не знаешь ответа - предложи связаться со специалистом."
@@ -599,83 +310,89 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
 
     query_lower = text.lower()
 
-    # ВАЖНОЕ ИЗМЕНЕНИЕ: Теперь запросы про Алису идут в обычный поиск для получения ссылки
-    if "алис" in text.lower() and ("knx" in text.lower() or "подключи" in text.lower() or "интеграци" in text.lower()):
-        print("🎯 ОБНОВЛЕННО: Запрос про Алису → обычный поиск (для ссылки на документацию)")
-        # Продолжаем обычный поиск - не переходим к ИИ
-
-    # Проверяем, нужно ли сразу подключать ИИ
-    use_ai_directly = should_use_ai_directly(text)
-    print(f"🎯 Финальное решение для '{text}': {'ИИ' if use_ai_directly else 'поиск'}")
+    # Улучшенная проверка: используем новую логику определения
+    use_ai_directly = should_use_ai_improved(text)
+    logging.info(f"🎯 Финальное решение для '{text}': {'ИИ' if use_ai_directly else 'поиск'}")
 
     if use_ai_directly:
         await handle_ai_directly(message, text, state)
         return
 
     # Обычный поиск для других запросов
-    results = await smart_document_search(text)
+    search_message = await message.answer(f"🔍 Ищу документацию по: {text}")
+    
+    try:
+        results = await smart_document_search(text)
 
-    if results:
-        # Проверяем, является ли результат ссылкой на папку
-        if len(results) == 1 and results[0].get("is_folder_link"):
-            folder_link = results[0].get("folder_link")
-            await message.answer(
-                f"📁 <b>Документация по запросу: {text}</b>\n\n"
-                f"Для просмотра всей документации перейдите по ссылке:\n"
-                f"🔗 <a href='{folder_link}'>Открыть папку на Яндекс.Диске</a>\n\n"
-                f"В папке вы найдете все доступные документы, инструкции и технические паспорта.",
-                parse_mode="HTML"
-            )
-            return
-        
-        # Стандартный вывод результатов поиска
-        response = f"🔍 Ищу документацию по: <b>{text}</b>\n\n"
-        response += f"✅ Найдено документов: {len(results)}\n\n"
-        
-        for i, file_data in enumerate(results[:3], 1):
-            try:
-                # СПЕЦИАЛЬНАЯ ССЫЛКА ДЛЯ КАБЕЛЯ KNX YE00820
-                file_name = file_data.get("name", "").lower()
-                if "ye00820" in file_name and "knx" in file_name:
-                    direct_link = "https://docs.360.yandex.ru/docs/view?url=ya-disk-public%3A%2F%2Fh1up8PyRs7zLi0hvFuTbhsLh7Nh2dv1lmMR1wsc5WOjH0pYg8ba5c4cLlLY6oeuWtFP6gwbjvtaafTptcua4SA%3D%3D%3A%2F01.%20iOT%20Systems%2F02.%20iOT%20%D0%9A%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%2FYE00820%20KNX%20%D0%BA%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%20J-Y(ST)Y%2C%202x2x0%2C8%2C%20%D1%8D%D0%BA%D1%80%D0%B0%D0%BD%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%BD%D1%8B%D0%B9%20(%D0%BF%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BB%D1%8F%D0%B5%D1%82%D1%81%D1%8F%20%D0%BF%D0%BE%20100%D0%BC)%2FYE00820%20ru.pdf&name=YE00820%20ru.pdf&nosw=1"
-                else:
-                    direct_link = build_docs_url(file_data["path"])
-                
-                # Форматируем вывод с кликабельными ссылками
-                response += f"{i}. <b>{file_data['name']}</b>\n"
-                response += f"   └─ 📎 <a href='{direct_link}'>Открыть документ</a>\n\n"
-                
-            except Exception as e:
-                logging.error(f"Ошибка генерации ссылки: {e}")
-                response += f"{i}. <b>{file_data['name']}</b>\n"
-                response += f"   └─ 📎 Файл в базе документации\n\n"
-        
-        response += "Полученная информация вам помогла?"
-        
-        # Только кнопки Да/Нет (без кнопок документов)
-        await message.answer(
-            response,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
-                    InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
-                ]
-            ]),
-            parse_mode="HTML"  # Важно для кликабельных ссылок!
-        )
-        
-        # Если нашли только технические паспорта для сложного запроса
-        if len(results) == 1 and has_only_technical_files(results):
-            await message.answer(
-                "🤔 Кажется, это техническая документация, а не руководство по интеграции.\n\n"
-                "Могу подключить ИИ-помощника для более точного ответа:",
+        if results:
+            # Проверяем, является ли результат ссылкой на папку
+            if len(results) == 1 and results[0].get("is_folder_link"):
+                folder_link = results[0].get("folder_link")
+                await search_message.edit_text(
+                    f"📁 <b>Документация по запросу: {text}</b>\n\n"
+                    f"Для просмотра всей документации перейдите по ссылке:\n"
+                    f"🔗 <a href='{folder_link}'>Открыть папку на Яндекс.Диске</a>\n\n"
+                    f"В папке вы найдете все доступные документы, инструкции и технические паспорта.",
+                    parse_mode="HTML"
+                )
+                return
+            
+            # Стандартный вывод результатов поиска
+            response = f"🔍 Результаты поиска по: <b>{text}</b>\n\n"
+            response += f"✅ Найдено документов: {len(results)}\n\n"
+            
+            for i, file_data in enumerate(results[:3], 1):
+                try:
+                    # СПЕЦИАЛЬНАЯ ССЫЛКА ДЛЯ КАБЕЛЯ KNX YE00820
+                    file_name = file_data.get("name", "").lower()
+                    if "ye00820" in file_name and "knx" in file_name:
+                        direct_link = "https://docs.360.yandex.ru/docs/view?url=ya-disk-public%3A%2F%2Fh1up8PyRs7zLi0hvFuTbhsLh7Nh2dv1lmMR1wsc5WOjH0pYg8ba5c4cLlLY6oeuWtFP6gwbjvtaafTptcua4SA%3D%3D%3A%2F01.%20iOT%20Systems%2F02.%20iOT%20%D0%9A%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%2FYE00820%20KNX%20%D0%BA%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%20J-Y(ST)Y%2C%202x2x0%2C8%2C%20%D1%8D%D0%BA%D1%80%D0%B0%D0%BD%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%BD%D1%8B%D0%B9%20(%D0%BF%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BB%D1%8F%D0%B5%D1%82%D1%81%D1%8F%20%D0%BF%D0%BE%20100%D0%BC)%2FYE00820%20ru.pdf&name=YE00820%20ru.pdf&nosw=1"
+                    else:
+                        direct_link = build_docs_url(file_data["path"])
+                    
+                    # Форматируем вывод с кликабельными ссылками
+                    response += f"{i}. <b>{file_data['name']}</b>\n"
+                    response += f"   └─ 📎 <a href='{direct_link}'>Открыть документ</a>\n\n"
+                    
+                except Exception as e:
+                    logging.error(f"Ошибка генерации ссылки: {e}")
+                    response += f"{i}. <b>{file_data['name']}</b>\n"
+                    response += f"   └─ 📎 Файл в базе документации\n\n"
+            
+            response += "Полученная информация вам помогла?"
+            
+            # Только кнопки Да/Нет (без кнопок документов)
+            await search_message.edit_text(
+                response,
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🧠 Спросить у ИИ", callback_data=f"ask_ai:{text}")]
-                ])
+                    [
+                        InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
+                        InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
+                    ]
+                ]),
+                parse_mode="HTML"  # Важно для кликабельных ссылок!
             )
-        
-    else:
-        # Если документы не найдены - подключаем ИИ
+            
+            # Если нашли только технические паспорта для сложного запроса
+            if len(results) == 1 and has_only_technical_files(results):
+                await message.answer(
+                    "🤔 Кажется, это техническая документация, а не руководство по интеграции.\n\n"
+                    "Могу подключить ИИ-помощника для более точного ответа:",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🧠 Спросить у ИИ", callback_data=f"ask_ai:{text}")]
+                    ])
+                )
+            
+        else:
+            # Если документы не найдены - подключаем ИИ
+            await search_message.edit_text("❌ Документация не найдена. Подключаю ИИ-помощника...")
+            await handle_ai_directly(message, text, state)
+            
+    except Exception as e:
+        logging.error(f"Ошибка поиска: {e}")
+        await search_message.edit_text(
+            "⚠️ Произошла ошибка при поиске. Попробую подключить ИИ-помощника..."
+        )
         await handle_ai_directly(message, text, state)
 
 # Обработчики для кнопок "Да/Нет"
@@ -739,14 +456,15 @@ async def handle_ask_ai_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     
     query = callback.data.replace("ask_ai:", "")
-    thinking_msg = await callback.message.answer("Сортирую информацию по полочкам... Сейчас всё объясню! 🗂️")
+    thinking_msg = await callback.message.answer("🤔 Анализирую ваш вопрос...")
     
     await state.update_data(original_query=query)
     
-    # Контекст с требованием отвечать только на русском
+    # Извлекаем бренды из запроса для контекста
+    brands_context = extract_brands_from_query(query)
     context = (
         "Ты эксперт по технической документации оборудования умного дома. "
-        "Бренды: HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems. "
+        f"Бренды: {brands_context if brands_context else 'HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems'}. "
         "ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. "
         "Не используй английский язык в ответах. "
         "Отвечай кратко и по делу. Если не знаешь ответа - предложи связаться со специалистом."
