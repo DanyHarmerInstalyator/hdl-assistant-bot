@@ -48,6 +48,9 @@ class SupportForm(StatesGroup):
     phone = State()
     original_query = State()
 
+class DialogState(StatesGroup):
+    waiting_for_clarification = State()
+
 def should_use_ai_improved(query: str) -> bool:
     """
     Улучшенная логика определения когда использовать ИИ
@@ -157,7 +160,11 @@ def extract_brands_from_query(query: str) -> str:
         "alisa": "Яндекс Алиса",
         "yeelight": "Yeelight Pro",
         "йилайт": "Yeelight Pro",
-        "coolautomation": "CoolAutomation"
+        "coolautomation": "CoolAutomation",
+        "dali": "Dali",
+        "дали": "Dali",
+        "easycool": "Easycool",
+        "изикул": "Easycool"
     }
     
     for keyword, brand in brand_keywords.items():
@@ -246,49 +253,33 @@ async def process_phone(message: Message, state: FSMContext):
         await message.answer("Не удалось отправить заявку. Напишите напрямую: https://t.me/hdl_support")
     await state.clear()
 
-async def handle_ai_directly(message: Message, text: str, state: FSMContext):
-    """
-    Обрабатывает запросы, которые сразу идут к ИИ
-    """
-    thinking_msg = await message.answer("🤔 Анализирую ваш технический вопрос...")
+async def handle_ai_with_context(message: Message, query: str, state: FSMContext):
+    """Обработка ИИ с сохранением контекста"""
+    thinking_msg = await message.answer("🤔 Анализирую ваш вопрос...")
     
-    await state.update_data(original_query=text)
+    await state.update_data(original_query=query)
     
-    query_lower = text.lower()
+    # Извлекаем бренды и создаем улучшенный контекст
+    brands_context = extract_brands_from_query(query)
     
-    # Улучшенный контекст для интеграции Алисы с KNX
-    if any(keyword in query_lower for keyword in ["алис", "голосов", "alisa"]):
-        context = (
-            "Ты технический эксперт по интеграции систем умного дома. "
-            "ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. "
-            "Не используй английский язык в ответах. "
-            
-            "Интеграция Яндекс Алисы с системами KNX:\n"
-            "1. Требуется шлюз или контроллер с поддержкой голосового управления\n"
-            "2. HDL предлагает решения для интеграции через Smart Gateway\n" 
-            "3. Необходимо настроить навык Алисы для работы с оборудованием\n"
-            "4. KNX - проводной протокол, требуется совместимое оборудование\n\n"
-            
-            "Возможные решения:\n"
-            "- HDL Smart Gateway с поддержкой голосового управления\n"
-            "- Шлюзы Buspro с интеграцией Алисы\n" 
-            "- Специальные контроллеры с поддержкой KNX и облачных сервисов\n"
-            "- Настройка через приложение HDL Smart\n\n"
-            
-            "Если нужны конкретные модели или инструкции - предложи связаться со специалистом."
-        )
-    else:
-        # Извлекаем бренды из запроса для контекста
-        brands_context = extract_brands_from_query(text)
-        context = (
-            "Ты эксперт по технической документации оборудования умного дома. "
-            f"Бренды: {brands_context if brands_context else 'HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems'}. "
-            "ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. "
-            "Не используй английский язык в ответах. "
-            "Отвечай кратко и по делу. Если не знаешь ответа - предложи связаться со специалистом."
-        )
+    # Улучшенный системный промпт для технических вопросов
+    context = (
+        "ТЫ ДОЛЖЕН ОТВЕЧАТЬ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! НИКАКОГО АНГЛИЙСКОГО!\n\n"
+        "Ты — технический эксперт по оборудованию умного дома.\n"
+        f"Бренды: {brands_context if brands_context else 'HDL, Buspro, Matech, URRI, iOT Systems, Yeelight Pro, CoolAutomation, Easycool, Dali'}.\n\n"
+        "ВАЖНО: Если пользователь спрашивает о совместимости оборудования:\n"
+        "1. Уточни какие конкретно устройства интересуют\n"
+        "2. Объясни общие принципы совместимости\n"
+        "3. Предложи связаться со специалистом для точного ответа\n"
+        "4. Если известны конкретные модели - дай информацию по ним\n\n"
+        "Отвечай подробно и технически грамотно, но если информации недостаточно - честно говори об этом.\n\n"
+        "ПРИМЕР ХОРОШЕГО ОТВЕТА:\n"
+        "'64-канальное реле может быть совместимо со шлюзом Dali при наличии соответствующего интерфейса. "
+        "Для точного ответа необходимо знать конкретные модели реле и шлюза. "
+        "Рекомендую обратиться к технической документации или специалисту.'"
+    )
     
-    ai_response = await ask_ai(text, context=context)
+    ai_response = await ask_ai(query, context=context)
     
     await thinking_msg.edit_text(
         f"🧠 {ai_response}\n\n"
@@ -300,47 +291,26 @@ async def handle_ai_directly(message: Message, text: str, state: FSMContext):
             ]
         ])
     )
+    
+    # Сохраняем ответ для возможного продолжения диалога
+    await state.update_data(
+        previous_response=ai_response,
+        clarification_count=0
+    )
 
-# --- Основной поиск ---
-@dp.message()
-async def handle_document_request(message: Message, state: FSMContext) -> None:
-    text = message.text.strip()
-    if not text:
-        return
-
-    if text.lower().strip(".,!?") in GREETINGS:
-        await message.answer(
-            "Здравствуйте! 👋\n\n"
-            "Используйте кнопки ниже или напишите запрос вручную — я с радостью помогу!",
-            reply_markup=main_reply_keyboard
-        )
-        return
-
-    if text in ["📚 База документации", "🎓 Обучающие материалы", "📞 Тех. специалист"]:
-        return
-
-    query_lower = text.lower()
-
-    # Улучшенная проверка: используем новую логику определения
-    use_ai_directly = should_use_ai_improved(text)
-    logging.info(f"🎯 Финальное решение для '{text}': {'ИИ' if use_ai_directly else 'поиск'}")
-
-    if use_ai_directly:
-        await handle_ai_directly(message, text, state)
-        return
-
-    # Обычный поиск для других запросов
-    search_message = await message.answer(f"🔍 Ищу документацию по: {text}")
+async def handle_search_with_context(message: Message, query: str, state: FSMContext):
+    """Обработка поиска с сохранением контекста"""
+    search_message = await message.answer(f"🔍 Ищу документацию по: {query}")
     
     try:
-        results = await smart_document_search(text)
+        results = await smart_document_search(query)
 
         if results:
             # Проверяем, является ли результат ссылкой на папку
             if len(results) == 1 and results[0].get("is_folder_link"):
                 folder_link = results[0].get("folder_link")
                 await search_message.edit_text(
-                    f"📁 <b>Документация по запросу: {text}</b>\n\n"
+                    f"📁 <b>Документация по запросу: {query}</b>\n\n"
                     f"Для просмотра всей документации перейдите по ссылке:\n"
                     f"🔗 <a href='{folder_link}'>Открыть папку на Яндекс.Диске</a>\n\n"
                     f"В папке вы найдете все доступные документы, инструкции и технические паспорта.",
@@ -349,7 +319,7 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
                 return
             
             # Стандартный вывод результатов поиска
-            response = f"🔍 Результаты поиска по: <b>{text}</b>\n\n"
+            response = f"🔍 Результаты поиска по: <b>{query}</b>\n\n"
             response += f"✅ Найдено документов: {len(results)}\n\n"
             
             for i, file_data in enumerate(results[:3], 1):
@@ -372,7 +342,6 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
             
             response += "Полученная информация вам помогла?"
             
-            # Только кнопки Да/Нет (без кнопок документов)
             await search_message.edit_text(
                 response,
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -381,30 +350,116 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
                         InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
                     ]
                 ]),
-                parse_mode="HTML"  # Важно для кликабельных ссылок!
+                parse_mode="HTML"
             )
             
             # Если нашли только технические паспорта для сложного запроса
             if len(results) == 1 and has_only_technical_files(results):
                 await message.answer(
                     "🤔 Кажется, это техническая документация, а не руководство по интеграции.\n\n"
-                    "Дайте мне немного времени для более точного ответа:",
+                    "Могу подключить ИИ-помощника для более точного ответа:",
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="Сейчас все подготовлю", callback_data=f"ask_ai:{text}")]
+                        [InlineKeyboardButton(text="🧠 Спросить у ИИ", callback_data="ask_ai_current")]
                     ])
                 )
             
         else:
             # Если документы не найдены - подключаем ИИ
-            await search_message.edit_text("❌ Документация не найдена. Дайте мне немного времени...")
-            await handle_ai_directly(message, text, state)
+            await search_message.edit_text("❌ Документация не найдена. Подключаю ИИ-помощника...")
+            await handle_ai_with_context(message, query, state)
             
     except Exception as e:
         logging.error(f"Ошибка поиска: {e}")
         await search_message.edit_text(
-            "Дайте мне немного времени,я все подготовлю"
+            "🔍 Не удалось найти документацию. Подключаю ИИ-помощника..."
         )
-        await handle_ai_directly(message, text, state)
+        await handle_ai_with_context(message, query, state)
+
+async def process_new_query(message: Message, text: str, state: FSMContext):
+    """Обрабатывает новый запрос (не уточнение)"""
+    # Сбрасываем счетчик уточнений и флаг
+    await state.update_data(
+        clarification_count=0,
+        waiting_clarification=False,
+        original_query=text
+    )
+    
+    # Определяем тип запроса
+    use_ai_directly = should_use_ai_improved(text)
+    
+    if use_ai_directly:
+        await handle_ai_with_context(message, text, state)
+    else:
+        await handle_search_with_context(message, text, state)
+
+async def process_combined_query(message: Message, query: str, state: FSMContext):
+    """Обрабатывает объединенный запрос (исходный + уточнение)"""
+    
+    # Сохраняем обновленный запрос
+    await state.update_data(original_query=query)
+    
+    # Определяем тип запроса
+    use_ai_directly = should_use_ai_improved(query)
+    
+    if use_ai_directly:
+        # Используем ИИ для сложных технических вопросов
+        await handle_ai_with_context(message, query, state)
+    else:
+        # Используем поиск для документации
+        await handle_search_with_context(message, query, state)
+
+# --- Основной поиск ---
+@dp.message()
+async def handle_document_request(message: Message, state: FSMContext) -> None:
+    text = message.text.strip()
+    if not text:
+        return
+
+    # Проверяем, не ожидаем ли мы уточнения
+    data = await state.get_data()
+    waiting_clarification = data.get("waiting_clarification", False)
+    
+    if waiting_clarification:
+        # Это уточнение к предыдущему запросу
+        await handle_clarification_message(message, text, state)
+        return
+
+    # Проверяем приветствия
+    if text.lower().strip(".,!?") in GREETINGS:
+        await message.answer(
+            "Здравствуйте! 👋\n\n"
+            "Используйте кнопки ниже или напишите запрос вручную — я с радостью помогу!",
+            reply_markup=main_reply_keyboard
+        )
+        return
+
+    # Проверяем кнопки
+    if text in ["📚 База документации", "🎓 Обучающие материалы", "📞 Тех. специалист"]:
+        return
+
+    # Обрабатываем как новый запрос
+    await process_new_query(message, text, state)
+
+async def handle_clarification_message(message: Message, clarification: str, state: FSMContext):
+    """Обрабатывает уточнение к предыдущему запросу"""
+    data = await state.get_data()
+    original_query = data.get("original_query", "")
+    
+    if not original_query:
+        await message.answer("❌ Не удалось найти исходный запрос. Пожалуйста, задайте вопрос заново.")
+        await state.clear()
+        return
+    
+    # Объединяем исходный запрос с уточнением
+    combined_query = f"{original_query} {clarification}"
+    
+    await message.answer(f"🔍 Анализирую уточненный запрос: <b>{combined_query}</b>", parse_mode="HTML")
+    
+    # Сбрасываем флаг ожидания уточнения
+    await state.update_data(waiting_clarification=False)
+    
+    # Обрабатываем объединенный запрос
+    await process_combined_query(message, combined_query, state)
 
 # Обработчики для кнопок "Да/Нет"
 @dp.callback_query(lambda c: c.data.startswith("info_helpful:"))
@@ -414,11 +469,11 @@ async def handle_info_helpful_callback(callback: CallbackQuery, state: FSMContex
     action = callback.data.split(":")[1]
     data = await state.get_data()
     original_query = data.get("original_query", "запрос")
+    clarification_count = data.get("clarification_count", 0)
     
     if action == "yes":
         response_text = "Спасибо что воспользовались HDL Assistant! 🎉"
         
-        # Только кнопка "Новый поиск"
         await callback.message.answer(
             response_text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -426,28 +481,89 @@ async def handle_info_helpful_callback(callback: CallbackQuery, state: FSMContex
             ])
         )
         
-    elif action == "no":
-        response_text = "Уточните запрос - я с радостью помогу! 💡"
+        # Очищаем состояние диалога
+        await state.clear()
         
-        # Если пользователь уже нажимал "Нет" ранее - показываем кнопки
-        user_data = await state.get_data()
-        if user_data.get('already_clicked_no'):
+    elif action == "no":
+        clarification_count += 1
+        
+        if clarification_count <= 2:  # Максимум 2 попытки уточнения
+            # Предлагаем уточнить текущий запрос
+            response_text = (
+                "Давайте уточним ваш запрос! 🤔\n\n"
+                f"Ваш исходный вопрос: <b>«{original_query}»</b>\n\n"
+                "Напишите дополнительные детали или уточнения прямо в чат..."
+            )
+            
+            await callback.message.answer(
+                response_text,
+                parse_mode="HTML"
+            )
+            
+            # Сохраняем состояние для продолжения диалога
+            await state.update_data(
+                clarification_count=clarification_count,
+                waiting_clarification=True,
+                original_query=original_query
+            )
+            
+        else:
+            # После двух попыток - предлагаем специалиста
+            response_text = (
+                "Похоже, мне не удалось помочь с вашим вопросом. 😔\n\n"
+                "Рекомендую обратиться к техническому специалисту - он сможет дать точный ответ!"
+            )
+            
             await callback.message.answer(
                 response_text,
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [
-                        InlineKeyboardButton(text="🔄 Уточнить запрос", callback_data=f"ask_ai:{original_query}"),
-                        InlineKeyboardButton(text="📞 Специалист", callback_data="support_form")
-                    ]
+                    [InlineKeyboardButton(text="📞 Связаться со специалистом", callback_data="support_form")],
+                    [InlineKeyboardButton(text="🔍 Новый поиск", callback_data="new_search")]
                 ])
             )
-        else:
-            # Первое нажатие "Нет" - без кнопок
-            await callback.message.answer(response_text)
-            await state.update_data(already_clicked_no=True)
+            await state.clear()
     
     # Удаляем старые кнопки после нажатия
     await callback.message.edit_reply_markup(reply_markup=None)
+
+# Обработчик для кнопки "Спросить у ИИ"
+@dp.callback_query(lambda c: c.data == "ask_ai_current")
+async def handle_ask_ai_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    
+    data = await state.get_data()
+    original_query = data.get("original_query", "")
+    
+    if not original_query:
+        await callback.message.answer("❌ Не удалось найти запрос. Пожалуйста, задайте вопрос заново.")
+        return
+    
+    thinking_msg = await callback.message.answer("🤔 Анализирую ваш вопрос...")
+    
+    await state.update_data(original_query=original_query)
+    
+    # Извлекаем бренды из запроса для контекста
+    brands_context = extract_brands_from_query(original_query)
+    context = (
+        "Ты эксперт по технической документации оборудования умного дома. "
+        f"Бренды: {brands_context if brands_context else 'HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems'}. "
+        "ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. "
+        "Не используй английский язык в ответах. "
+        "Отвечай кратко и по делу. Если не знаешь ответа - предложи связаться со специалистом."
+    )
+    
+    ai_response = await ask_ai(original_query, context=context)
+    
+    await thinking_msg.edit_text(
+        f"🧠 {ai_response}\n\n"
+        f"Полученная информация вам помогла?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
+                InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
+            ]
+        ])
+    )
 
 # Обработчики для дополнительных кнопок
 @dp.callback_query(lambda c: c.data == "new_search")
@@ -460,41 +576,6 @@ async def support_form_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer("Пожалуйста, укажите ваше ФИО:")
     await state.set_state(SupportForm.name)
-
-# Обработчик для кнопки "Спросить у ИИ"
-@dp.callback_query(lambda c: c.data.startswith("ask_ai:"))
-async def handle_ask_ai_callback(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    
-    query = callback.data.replace("ask_ai:", "")
-    thinking_msg = await callback.message.answer("🤔 Анализирую ваш вопрос...")
-    
-    await state.update_data(original_query=query)
-    
-    # Извлекаем бренды из запроса для контекста
-    brands_context = extract_brands_from_query(query)
-    context = (
-        "ТЫ ДОЛЖЕН ОТВЕЧАТЬ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! НИКАКОГО АНГЛИЙСКОГО!\n\n"
-        "Ты — эксперт по технической документации оборудования умного дома. "
-        f"Бренды: {brands_context if brands_context else 'HDL, Buspro, Matech, URRI, Yeelight Pro, CoolAutomation, iOT Systems'}. "
-        "Отвечай кратко и по делу только на русском языке. "
-        "Если не знаешь ответа — предложи связаться со специалистом.\n\n"
-        "ВАЖНО: Все ответы должны быть только на русском языке! "
-        "Не используй английские слова или фразы."
-    )
-    
-    ai_response = await ask_ai(query, context=context)
-    
-    await thinking_msg.edit_text(
-        f"🧠 {ai_response}\n\n"
-        f"Полученная информация вам помогла?",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
-                InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
-            ]
-        ])
-    )
 
 async def on_startup(bot: Bot, base_url: str):
     """Установка вебхука при старте"""
