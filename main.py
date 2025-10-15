@@ -61,7 +61,7 @@ def should_use_ai_improved(query: str) -> bool:
     never_use_ai_keywords = {
         # Бренды и продукты
         "изикул", "easycool", "урри", "urri", "хдл", "hdl", "баспро", "buspro", 
-        "матек", "matech", "йилайт", "yeelight", "изи кул",
+        "матек", "matech", "йилайт", "yeelight", "изи кул", "карниз", "карнизы", "радиусный", "спецификация карнизов", "паспорт карнизов",
         
         # Документация
         "техничка", "документация", "паспорт", "инструкция", "руководство", "manual",
@@ -257,7 +257,13 @@ async def handle_ai_with_context(message: Message, query: str, state: FSMContext
     """Обработка ИИ с сохранением контекста"""
     thinking_msg = await message.answer("🤔 Анализирую ваш вопрос...")
     
-    await state.update_data(original_query=query)
+    # Получаем текущее состояние
+    data = await state.get_data()
+    ai_response_count = data.get("ai_response_count", 0) + 1
+    await state.update_data(
+        original_query=query,
+        ai_response_count=ai_response_count
+    )
     
     # Извлекаем бренды и создаем улучшенный контекст
     brands_context = extract_brands_from_query(query)
@@ -281,18 +287,25 @@ async def handle_ai_with_context(message: Message, query: str, state: FSMContext
     
     ai_response = await ask_ai(query, context=context)
     
-    await thinking_msg.edit_text(
-        f"🧠 {ai_response}\n\n"
-        f"Полученная информация вам помогла?",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
-                InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
-            ]
+    # Формируем кнопки
+    inline_buttons = [
+        [
+            InlineKeyboardButton(text="✅ Да", callback_data="info_helpful:yes"),
+            InlineKeyboardButton(text="❌ Нет", callback_data="info_helpful:no")
+        ]
+    ]
+    
+    # Добавляем кнопку "Тех. Специалист" при втором и последующих ответах от ИИ
+    if ai_response_count >= 2:
+        inline_buttons.append([
+            InlineKeyboardButton(text="📞 Тех. Специалист", callback_data="support_form")
         ])
+    
+    await thinking_msg.edit_text(
+        f"🧠 {ai_response}\n\nПолученная информация вам помогла?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=inline_buttons)
     )
     
-    # Сохраняем ответ для возможного продолжения диалога
     await state.update_data(
         previous_response=ai_response,
         clarification_count=0
@@ -325,11 +338,14 @@ async def handle_search_with_context(message: Message, query: str, state: FSMCon
             for i, file_data in enumerate(results[:3], 1):
                 try:
                     # СПЕЦИАЛЬНАЯ ССЫЛКА ДЛЯ КАБЕЛЯ KNX YE00820
-                    file_name = file_data.get("name", "").lower()
-                    if "ye00820" in file_name and "knx" in file_name:
-                        direct_link = "https://docs.360.yandex.ru/docs/view?url=ya-disk-public%3A%2F%2Fh1up8PyRs7zLi0hvFuTbhsLh7Nh2dv1lmMR1wsc5WOjH0pYg8ba5c4cLlLY6oeuWtFP6gwbjvtaafTptcua4SA%3D%3D%3A%2F01.%20iOT%20Systems%2F02.%20iOT%20%D0%9A%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%2FYE00820%20KNX%20%D0%BA%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%20J-Y(ST)Y%2C%202x2x0%2C8%2C%20%D1%8D%D0%BA%D1%80%D0%B0%D0%BD%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%BD%D1%8B%D0%B9%20(%D0%BF%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BB%D1%8F%D0%B5%D1%82%D1%81%D1%8F%20%D0%BF%D0%BE%20100%D0%BC)%2FYE00820%20ru.pdf&name=YE00820%20ru.pdf&nosw=1"
+                    if file_data.get("is_folder_link"):
+                        direct_link = file_data["folder_link"]
                     else:
-                        direct_link = build_docs_url(file_data["path"])
+                        file_name = file_data.get("name", "").lower()
+                        if "ye00820" in file_name and "knx" in file_name:    
+                            direct_link = "https://docs.360.yandex.ru/docs/view?url=ya-disk-public%3A%2F%2Fh1up8PyRs7zLi0hvFuTbhsLh7Nh2dv1lmMR1wsc5WOjH0pYg8ba5c4cLlLY6oeuWtFP6gwbjvtaafTptcua4SA%3D%3D%3A%2F01.%20iOT%20Systems%2F02.%20iOT%20%D0%9A%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%2FYE00820%20KNX%20%D0%BA%D0%B0%D0%B1%D0%B5%D0%BB%D1%8C%20J-Y(ST)Y%2C%202x2x0%2C8%2C%20%D1%8D%D0%BA%D1%80%D0%B0%D0%BD%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%BD%D1%8B%D0%B9%20(%D0%BF%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BB%D1%8F%D0%B5%D1%82%D1%81%D1%8F%20%D0%BF%D0%BE%20100%D0%BC)%2FYE00820%20ru.pdf&name=YE00820%20ru.pdf&nosw=1"
+                        else:
+                            direct_link = build_docs_url(file_data["path"])
                     
                     # Форматируем вывод с кликабельными ссылками
                     response += f"{i}. <b>{file_data['name']}</b>\n"
