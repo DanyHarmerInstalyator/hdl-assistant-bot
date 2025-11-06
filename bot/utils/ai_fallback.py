@@ -1,19 +1,14 @@
 import os
+import httpx
 import logging
-from typing import Optional
-from openai import OpenAI # type: ignore
 import asyncio
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 class StableAIService:
     def __init__(self):
         self.request_count = 0
-        # Используем официальный OpenAI клиент
-        self.client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENROUTER_API_KEY"),
-        )
         self.available_models = [
             "mistralai/mistral-7b-instruct",
             "huggingfaceh4/zephyr-7b-beta", 
@@ -22,6 +17,8 @@ class StableAIService:
         ]
         self.current_model_index = 0
         self.max_retries = 2
+        self.timeout = 30.0
+        self.api_key = os.getenv("OPENROUTER_API_KEY")
 
     def get_current_model(self) -> str:
         return self.available_models[self.current_model_index]
@@ -61,20 +58,20 @@ class StableAIService:
         answer = answer.strip()
         
         # Более мягкая проверка длины
-        if len(answer) < 15:  # Минимум 15 символов
+        if len(answer) < 15:
             return False, f"Слишком короткий ответ: '{answer}'"
         
         # Проверяем, что ответ на русском (но не слишком строго)
         russian_chars = len([c for c in answer if 'а' <= c <= 'я' or 'А' <= c <= 'Я' or c in 'ёЁ'])
         total_chars = len([c for c in answer if c.isalpha()])
         
-        if total_chars > 10 and russian_chars / total_chars < 0.2:  # 20% русских букв
+        if total_chars > 10 and russian_chars / total_chars < 0.2:
             return False, f"Мало русских символов в ответе: '{answer}'"
         
         return True, answer
 
     async def ask_ai(self, user_query: str, context: str = "") -> str:
-        """Асинхронная версия с официальным клиентом"""
+        """Асинхронная версия с httpx"""
         if not user_query or len(user_query.strip()) < 3:
             return "Пожалуйста, уточните ваш вопрос"
 
@@ -86,60 +83,60 @@ class StableAIService:
             try:
                 logger.info(f"🔄 Попытка {attempt + 1} с моделью: {current_model}")
                 
-                # Запускаем синхронный запрос в отдельном потоке
-                completion = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: self.client.chat.completions.create(
-                        extra_headers={
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.post(
+                        url="https://openrouter.ai/api/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
                             "HTTP-Referer": "https://t.me/HDL_Assistant_Bot",
                             "X-Title": "HDL Assistant Bot",
                         },
-                        model=current_model,
-                        messages=[
-                            {
-                                "role": "system", 
-                                "content": system_prompt
-                            },
-                            {
-                                "role": "user", 
-                                "content": f"Запрос: {user_query}\n\nКонтекст: {context}" if context else user_query
-                            }
-                        ],
-                        temperature=0.7,
-                        max_tokens=500,
+                        json={
+                            "model": current_model,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_query}
+                            ],
+                            "temperature": 0.7,
+                            "max_tokens": 500,
+                        }
                     )
-                )
 
-                self.request_count += 1
-                answer = completion.choices[0].message.content.strip()
-                
-                # Логируем использование
-                usage = completion.usage
-                if usage:
-                    logger.info(f"📝 Использовано токенов: {usage.total_tokens}")
-                
-                # Валидируем ответ
-                is_valid, validated_answer = self._validate_ai_response(answer)
-                
-                if is_valid:
-                    logger.info(f"✅ Успешный ответ от {current_model}")
-                    logger.info(f"📄 Ответ: {validated_answer[:100]}...")  # Логируем начало ответа
-                    return validated_answer
-                else:
-                    logger.warning(f"Невалидный ответ: {validated_answer}")
-                    # Пробуем следующую модель
-                    self.switch_to_next_model()
+                    if response.status_code == 200:
+                        data = response.json()
+                        answer = data["choices"][0]["message"]["content"].strip()
+                        
+                        # Логируем использование токенов
+                        usage = data.get('usage', {})
+                        if usage:
+                            logger.info(f"📝 Использовано токенов: {usage.get('total_tokens', 0)}")
+                        
+                        # Валидируем ответ
+                        is_valid, validated_answer = self._validate_ai_response(answer)
+                        
+                        if is_valid:
+                            logger.info(f"✅ Успешный ответ от {current_model}")
+                            logger.info(f"📄 Ответ: {validated_answer[:100]}...")
+                            return validated_answer
+                        else:
+                            logger.warning(f"Невалидный ответ: {validated_answer}")
+                            self.switch_to_next_model()
                     
+                    elif response.status_code == 404:
+                        logger.warning(f"Модель {current_model} недоступна")
+                        self.switch_to_next_model()
+                    else:
+                        logger.error(f"Ошибка API {response.status_code}: {response.text}")
+                        if attempt == self.max_retries - 1:
+                            break
+                            
             except Exception as e:
                 logger.error(f"❌ Ошибка при запросе к ИИ: {e}")
-                if "404" in str(e) or "not found" in str(e).lower():
-                    logger.warning(f"Модель {current_model} недоступна")
-                    self.switch_to_next_model()
                 if attempt == self.max_retries - 1:
                     break
-                await asyncio.sleep(1)  # Небольшая задержка между попытками
+                await asyncio.sleep(1)
 
-        # Если все попытки failed, возвращаем осмысленный ответ
         return self._get_smart_fallback(user_query)
 
     def _get_smart_fallback(self, user_query: str) -> str:
@@ -192,7 +189,6 @@ class StableAIService:
 _ai_service = StableAIService()
 
 async def ask_ai(user_query: str, context: str = "") -> str:
-    """Основная асинхронная функция для внешнего использования"""
     return await _ai_service.ask_ai(user_query, context)
 
 def get_fallback_response() -> str:
