@@ -33,7 +33,11 @@ SYNONYMS = {
     "юрии": "urri", "хдл": "hdl", "баспро": "buspro", "баспр": "buspro",
     "матек": "matech", "матеч": "matech", "йилайт": "yeelight",
     "изикул": "easycool", "кабел": "cable", "замок": "lock",
-    "дверной": "door", "иот": "iot", "айоти": "iot", "техничка": "technical"
+    "дверной": "door", "иот": "iot", "айоти": "iot", "техничка": "technical",
+    "кулплуг": "coolplug",
+    "кулплаг": "coolplug",
+    "кулплаг техничка": "coolplug manual",
+    "кулплаг мануал": "coolplug manual","кулплагтехничка": "coolplug manual","кулплагмануал": "coolplug manual",
 }
 
 def normalize_with_synonyms(query: str) -> str:
@@ -103,6 +107,7 @@ class SearchEngine:
             "easycool": ["изикул", "easy cool", "изи кул"],
             "кабел": ["кабель", "cable"],
             "замок": ["lock", "дверной замок", "door lock"],
+            "кулплаг": ["кулплаг", "кул плаг", "кулплаг техничка", "кулплаг мануал"],
             "замки": ["locks", "дверные замки", "door locks"],
             "дверной": ["door", "дверной"],
             "iot": ["иот", "iot systems", "айоти"],
@@ -152,6 +157,17 @@ class SearchEngine:
             "easycool кондиционеры": "https://disk.360.yandex.ru/d/EuWsEkI__LPmIQ",
             "кондиционеры coolautomation": "https://disk.360.yandex.ru/d/UVzihaR7eRIRmw",
             "coolautomation кондиционеры": "https://disk.360.yandex.ru/d/UVzihaR7eRIRmw",
+            
+            # === НОВОЕ: CoolPlug ===
+            "кулплаг": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/03.%20Coolautomation/3.%20CooLink%20Hub%20%26%20Coolplug  ",
+            "техничка на кулплаг": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/03.%20Coolautomation/3.%20CooLink%20Hub%20%26%20Coolplug  ",
+            "отправь на кулплаг": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/03.%20Coolautomation/3.%20CooLink%20Hub%20%26%20Coolplug  ",
+            "Пришли техничку на кулплаг": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/03.%20Coolautomation/3.%20CooLink%20Hub%20%26%20Coolplug  ",
+            "кулплаг техничка": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/03.%20Coolautomation/3.%20CooLink%20Hub%20%26%20Coolplug  ",
+            "кулплаг мануал": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/03.%20Coolautomation/3.%20CooLink%20Hub%20%26%20Coolplug  ",
+            "кулплагтехничка": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/03.%20Coolautomation/3.%20CooLink%20Hub%20%26%20Coolplug  ",
+            "кулплагмануал": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/03.%20Coolautomation/3.%20CooLink%20Hub%20%26%20Coolplug  ",
+        
 
             # EasyCool
             "изикул": "https://disk.360.yandex.ru/d/xJi6eEXBTq01sw/01.%20iOT%20Systems/03.%20iOT%20EasyCool",
@@ -183,6 +199,9 @@ class SearchEngine:
             "кондиционер", "кондиционеры", "кондиционеры баспро", "кондиционеры совместимы",
             "кондиционеры модели", "совместимость кондиционеров", "кондиционеры с протоколом",
             "спецификация кондиционеров", "паспорт кондиционера", "техничка на кондиционер"
+        }
+        self._coolplug_keywords = {
+            "кулплаг", "Пришли техничку на кулплаг",  "кулплуг", "отправь на кулплаг", "техничка на кулплаг", "кулплаг техничка", "кулплаг мануал", "кулплагтехничка", "кулплагмануал"
         }
 
     def load_index(self) -> List[Dict[str, Any]]:

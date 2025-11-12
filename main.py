@@ -18,7 +18,18 @@ from dotenv import load_dotenv
 # Обновленные импорты после объединения файлов
 from bot.utils.search_engine import smart_document_search, build_docs_url, should_use_ai_directly, has_only_technical_files
 from bot.utils.ai_fallback import ask_ai
-from keyboards import main_reply_keyboard, docs_inline_keyboard
+from keyboards import (
+    main_reply_keyboard,
+    docs_inline_keyboard,
+    faq_main_inline,
+    faq_software_inline,
+    faq_hardware_inline,
+    faq_partnership_inline,
+    faq_knx_inline,
+    faq_buspro_inline,
+    faq_integrations_inline,
+    faq_general_inline,
+) 
 
 load_dotenv()
 
@@ -212,6 +223,96 @@ async def handle_docs_base(message: Message):
 @dp.message(lambda msg: msg.text == "🎓 Обучающие материалы")
 async def handle_courses(message: Message):
     await message.answer("🎓 Обучающая платформа HDL:\nhttps://iotsystems.getcourse.ru/teach/control")
+    
+    
+
+# ---START Обработчики FAQ ------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+# --- Обработчики FAQ ---
+@dp.message(lambda msg: msg.text == "❓ FAQ: Часто Задаваемые Вопросы")
+async def handle_faq_button(message: Message):
+    await message.answer(
+        "Выберите категорию вопросов:",
+        reply_markup=faq_main_inline
+    )
+
+@dp.callback_query(lambda c: c.data == "faq_back_to_main")
+async def faq_back_to_main(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "Выберите категорию вопросов:",
+        reply_markup=faq_main_inline
+    )
+
+# 1. Вопросы по ПО
+@dp.callback_query(lambda c: c.data == "faq_software")
+async def faq_software_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "Вопросы по ПО:",
+        reply_markup=faq_software_inline
+    )
+
+# 2. Вопросы по оборудованию
+@dp.callback_query(lambda c: c.data == "faq_hardware")
+async def faq_hardware_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "Вопросы по оборудованию:",
+        reply_markup=faq_hardware_inline
+    )
+
+# 3. Вопросы о сотрудничестве
+@dp.callback_query(lambda c: c.data == "faq_partnership")
+async def faq_partnership_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "Вопросы о сотрудничестве:",
+        reply_markup=faq_partnership_inline
+    )
+
+# 4. KNX
+@dp.callback_query(lambda c: c.data == "faq_knx")
+async def faq_knx_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "KNX:",
+        reply_markup=faq_knx_inline
+    )
+
+# 5. BusPro
+@dp.callback_query(lambda c: c.data == "faq_buspro")
+async def faq_buspro_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "BusPro:",
+        reply_markup=faq_buspro_inline
+    )
+
+# 6. Приложения/интеграции
+@dp.callback_query(lambda c: c.data == "faq_integrations")
+async def faq_integrations_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "Приложения и интеграции:",
+        reply_markup=faq_integrations_inline
+    )
+
+# 7. Общие вопросы
+@dp.callback_query(lambda c: c.data == "faq_general")
+async def faq_general_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "Общие вопросы:",
+        reply_markup=faq_general_inline
+    )
+
+# ---END Обработчики FAQ ------------------------------------------------------------------------------------------------------------------------------------
+
+
 
 @dp.message(lambda msg: msg.text == "📞 Тех. специалист")
 async def handle_support_button(message: Message, state: FSMContext):
