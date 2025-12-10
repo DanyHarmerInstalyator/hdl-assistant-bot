@@ -13,6 +13,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from bot.handlers import admin
+from aiogram import F
 from aiohttp import web
 from dotenv import load_dotenv
 
@@ -528,11 +529,15 @@ async def process_combined_query(message: Message, query: str, state: FSMContext
         await handle_search_with_context(message, query, state)
 
 # --- Основной поиск ---
-@dp.message()
+@dp.message(F.text)
 async def handle_document_request(message: Message, state: FSMContext) -> None:
     text = message.text.strip()
     if not text:
         return
+
+    # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: ИГНОРИРУЕМ КОМАНДЫ
+    if text.startswith("/"):
+        return  # пусть их обрабатывают роутеры (в т.ч. /admin, /start)
 
     # Проверяем, не ожидаем ли мы уточнения
     data = await state.get_data()
