@@ -12,6 +12,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from bot.handlers import admin
 from aiohttp import web
 from dotenv import load_dotenv
 
@@ -46,6 +47,7 @@ if not BOT_TOKEN:
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
+dp.include_router(admin.router) 
 
 GREETINGS = {
     "привет", "здравствуйте", "добрый день", "доброе утро", "добрый вечер",
