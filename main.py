@@ -49,7 +49,13 @@ if not BOT_TOKEN:
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
-dp.include_router(admin.router)
+# dp.include_router(admin.router)
+try:
+    from bot.handlers import admin
+    dp.include_router(admin.router)
+    logging.info("✅ Админ-роутер загружен")
+except Exception as e:
+    logging.exception("❌ Ошибка загрузки admin-модуля:")
 
 
 
