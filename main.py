@@ -12,7 +12,6 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from bot.handlers import admin
 from aiogram import F
 from aiohttp import web
 from dotenv import load_dotenv
@@ -53,9 +52,9 @@ dp = Dispatcher()
 try:
     from bot.handlers import admin
     dp.include_router(admin.router)
-    logging.info("✅ Админ-роутер загружен")
+    logging.info("✅ Админ-роутер успешно загружен")
 except Exception as e:
-    logging.exception("❌ Ошибка загрузки admin-модуля:")
+    logging.exception("❌ КРИТИЧЕСКАЯ ОШИБКА: не удалось загрузить admin-модуль")
 
 
 
@@ -544,9 +543,6 @@ async def handle_document_request(message: Message, state: FSMContext) -> None:
     if not text:
         return
 
-    # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: ИГНОРИРУЕМ КОМАНДЫ
-    if text.startswith("/"):
-        return  # пусть их обрабатывают роутеры (в т.ч. /admin, /start)
 
     # Проверяем, не ожидаем ли мы уточнения
     data = await state.get_data()
