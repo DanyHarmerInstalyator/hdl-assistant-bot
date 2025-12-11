@@ -1,5 +1,4 @@
 # bot/handlers/admin.py
-
 from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -26,7 +25,6 @@ async def process_broadcast(message: Message, state: FSMContext, bot):
     if not text or not text.strip():
         await message.answer("Текст не может быть пустым.")
         return
-    
     success = 0
     for user_id in BROADCAST_RECIPIENTS:
         try:
