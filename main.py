@@ -49,12 +49,41 @@ logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 # dp.include_router(admin.router)
-try:
-    from bot.handlers import admin
-    dp.include_router(admin.router)
-    logging.info("✅ Админ-роутер успешно загружен")
-except Exception as e:
-    logging.exception("❌ КРИТИЧЕСКАЯ ОШИБКА: не удалось загрузить admin-модуль")
+# --- ВСТРОЕННЫЙ АДМИН-МОДУЛЬ ---
+from aiogram.fsm.state import State, StatesGroup
+
+class AdminState(StatesGroup):
+    waiting_for_broadcast_text = State()
+
+ADMINS = [800054621]
+BROADCAST_RECIPIENTS = [7779513913, 1030339159]
+
+@dp.message(Command("admin"))
+async def cmd_admin(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await message.answer("❌ Доступ запрещён.")
+        return
+    await message.answer("Введите текст рассылки:")
+    await state.set_state(AdminState.waiting_for_broadcast_text)
+
+@dp.message(AdminState.waiting_for_broadcast_text)
+async def process_broadcast(message: Message, state: FSMContext, bot):
+    if message.from_user.id not in ADMINS:
+        await state.clear()
+        return
+    text = message.text
+    if not text or not text.strip():
+        await message.answer("Текст не может быть пустым.")
+        return
+    success = 0
+    for user_id in BROADCAST_RECIPIENTS:
+        try:
+            await bot.send_message(user_id, text)
+            success += 1
+        except Exception as e:
+            print(f"Ошибка: {e}")
+    await message.answer(f"✅ Отправлено {success} из {len(BROADCAST_RECIPIENTS)}")
+    await state.clear()
 
 
 
