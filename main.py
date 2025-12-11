@@ -7,7 +7,7 @@ from typing import List, Dict
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart  # ← добавь Command!
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -16,6 +16,7 @@ from bot.handlers import admin
 from aiogram import F
 from aiohttp import web
 from dotenv import load_dotenv
+
 
 # Обновленные импорты после объединения файлов
 from bot.utils.search_engine import smart_document_search, build_docs_url, should_use_ai_directly, has_only_technical_files
@@ -48,7 +49,9 @@ if not BOT_TOKEN:
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
-dp.include_router(admin.router) 
+dp.include_router(admin.router)
+
+
 
 GREETINGS = {
     "привет", "здравствуйте", "добрый день", "доброе утро", "добрый вечер",

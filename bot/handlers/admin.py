@@ -4,15 +4,10 @@ from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup  # ← ОБЯЗАТЕЛЬНЫЙ ИМПОРТ
-
+from bot.utils.states import AdminState
 from config.config import ADMINS, BROADCAST_RECIPIENTS
 
 router = Router()
-
-# Временное определение (лучше вынести в states.py, но для быстрого теста — так тоже сработает)
-class AdminState(StatesGroup):
-    waiting_for_broadcast_text = State()
 
 @router.message(Command("admin"))
 async def cmd_admin(message: Message, state: FSMContext):
@@ -31,6 +26,7 @@ async def process_broadcast(message: Message, state: FSMContext, bot):
     if not text or not text.strip():
         await message.answer("Текст не может быть пустым.")
         return
+    
     success = 0
     for user_id in BROADCAST_RECIPIENTS:
         try:
